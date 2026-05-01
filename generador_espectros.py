@@ -9,11 +9,12 @@ import os
 # Helpers for Load individual spectras
 
 def _to_float_series(s: pd.Series) -> pd.Series:
+    """
+    Converts a pandas Series to numeric values, fixing comma decimals and coercing invalid entries to NaN. 
+    Used for def load_and_align_spectra
+    """
+
     return pd.to_numeric(s.astype(str).str.replace(",", ".", regex=False), errors="coerce")
-"""
-Converts a pandas Series to numeric values, fixing comma decimals and coercing invalid entries to NaN. 
-Used for def load_and_align_spectra
-"""
 
 def read_spectrum_file(path: str):
     """
@@ -79,7 +80,8 @@ def resample_to_ref(ppm_i_desc, y_i_desc, ppm_ref_desc):
     y_ref_inc = f(x_ref_inc)
     return y_ref_inc[::-1]  
 
-def load_individual_spectra( root_dir: str, subfolder: str = os.path.join("Moleculas mol", "Espectros individuales"), ext: str = ".csv", atol: float = 1e-6):
+def load_individual_spectra( root_dir: str, subfolder: str = os.path.join("Moleculas mol", "Espectros individuales"), 
+                            ext: str = ".csv", atol: float = 1e-6):
     """
     Loads spectrum files, extracts ppm/real signals, and aligns all spectra to a common ppm axis.
     Parameters
@@ -384,7 +386,7 @@ def choose_phase_strategy(ppm_axis, y):
 
 
 
-def generadora_posta()
+#def generadora_posta()
 
 
 
