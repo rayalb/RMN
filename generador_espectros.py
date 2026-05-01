@@ -70,7 +70,7 @@ def resample_to_ref(ppm_i_desc, y_i_desc, ppm_ref_desc):
     y_i_inc = y_i_desc[::-1]
     x_ref_inc = ppm_ref_desc[::-1]
 
-    f = interp1d(
+    f = np.interp1d(
         x_i_inc, y_i_inc,
         kind="linear",
         bounds_error=False,
@@ -80,7 +80,7 @@ def resample_to_ref(ppm_i_desc, y_i_desc, ppm_ref_desc):
     y_ref_inc = f(x_ref_inc)
     return y_ref_inc[::-1]  
 
-def load_individual_spectra( root_dir: str, subfolder: str = os.path.join("Moleculas mol", "Espectros individuales"), 
+def load_individual_spectra(root_dir: str, subfolder: str = os.path.join("Moleculas mol", "Espectros individuales"), 
                             ext: str = ".csv", atol: float = 1e-6):
     """
     Loads spectrum files, extracts ppm/real signals, and aligns all spectra to a common ppm axis.
@@ -98,7 +98,7 @@ def load_individual_spectra( root_dir: str, subfolder: str = os.path.join("Molec
     x_ref : [np.ndarray (float)] Reference ppm axis used for alignment.
     """
 
-    folder = os.path.join(root_dir, path_to_spectras_ind)
+    folder = os.path.join(root_dir, subfolder)
 
     filenames = sorted([
         f for f in os.listdir(folder)
@@ -160,16 +160,16 @@ def cargar_perfil_metobolico(path = '/home/ray/Documents/...', show = False):
     return df 
 
 def definir_standard_interno(path, compuesto = 'metanol'):
- # Lectura del estándar interno 
+    # Lectura del estándar interno 
 
-path_std = os.path.join(root_dir, "Moleculas mol", "tsp-d4 sodico.csv")
+    path_std = os.path.join(path, "Moleculas mol", "tsp-d4 sodico.csv")
 
-# Lectura robusta del estándar interno (acepta tab, coma, 1–3 columnas)
-df_std = pd.read_csv(path_std, sep="\t", header=None, engine="python")
+    # Lectura robusta del estándar interno (acepta tab, coma, 1–3 columnas)
+    df_std = pd.read_csv(path_std, sep="\t", header=None, engine="python")
 
-# Si vino todo en una sola columna (caso Excel: "ppm,real")
-if df_std.shape[1] == 1:
-    parts = df_std.iloc[:, 0].astype(str)
+    # Si vino todo en una sola columna (caso Excel: "ppm,real")
+    if df_std.shape[1] == 1:
+        parts = df_std.iloc[:, 0].astype(str)
 
     # separar por coma o espacios
     if parts.str.contains(",", regex=False).any():
@@ -179,9 +179,9 @@ if df_std.shape[1] == 1:
 
     df_std = parts
 
-# Ahora esperamos al menos 2 columnas: ppm | real | (imag opcional)
-ppm_std  = pd.to_numeric(df_std.iloc[:, 0], errors="coerce").to_numpy()
-v        = pd.to_numeric(df_std.iloc[:, 1], errors="coerce").to_numpy()
+    # Ahora esperamos al menos 2 columnas: ppm | real | (imag opcional)
+    ppm_std  = pd.to_numeric(df_std.iloc[:, 0], errors="coerce").to_numpy()
+    v        = pd.to_numeric(df_std.iloc[:, 1], errors="coerce").to_numpy()
 
 # Limpieza básica
 mask = np.isfinite(ppm_std) & np.isfinite(v)
@@ -405,4 +405,4 @@ if __name__ == '__main__':
     path_to_spectras_ind = os.path.join(root_dir, "Moleculas mol", "Espectros individuales")
    
 
-    generador_spectros(path_to_spestros_ind)
+    #generador_spectros(path_to_spestros_ind)
