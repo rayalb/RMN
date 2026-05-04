@@ -957,4 +957,50 @@ def generate_mixture_spectra(
         mix_metadata.append(mix_meta)
 
     return spectra, concs, per_compound_params, mix_metadata
+  
+from preprocesador_dataset import build_individual_cache
 
+if __name__ == "__main__":
+
+    root_dir  = "/home/ray/Documents/Quimica/"
+    meta_ind_path = os.path.join(root_dir,"DataSet", 
+                                 "metadata_espectros_individuales_con_TSP sodico(SI).xlsx")
+    ind_dir = os.path.join(root_dir, "Espectros individuales + TSP sodico (SI)")
+    EXCEL_FILENAME = "Perfil metabolico vino.xlsx"
+    EXCEL_SHEET = "General"
+    INTERNAL_STD_FILE = "tsp-d4 sodico.csv"
+    INTERNAL_STD_FOLDER = "Moleculas mol"
+    SPECTRA_SUBFOLDER = os.path.join(INTERNAL_STD_FOLDER, "Espectros individuales")
+    SPECTRA_EXT = '.csv'
+
+    PPM_IS = 0.0    # nominal ppm of iternal standard (TSP)
+    WINDOWS_IS = 0.2 # +/- window around IS peak
+    PPM_MIN = 0.0
+    PPM_MAX = 10.0  # crop range
+
+    standardSpec, standardsDictionary, x_ref = load_individual_spectra(
+        root_dir = root_dir, subfolder = SPECTRA_SUBFOLDER, ext = SPECTRA_EXT
+    )
+
+    df = load_metabolic_profile(root_dir = root_dir, filename = EXCEL_FILENAME, sheet_name=EXCEL_SHEET)
+
+    
+    ppm_std, v_std = load_internal_standard(root_dir=root_dir, filename = INTERNAL_STD_FILE,
+                                            subfolder=INTERNAL_STD_FOLDER)
+    
+    master_df, diagnostics = match_spectra_to_metadata(df = df,
+                                                       standardsDictionary = standardsDictionary)
+    print(f"Matched: {diagnostics['matched']}/{diagnostics['total']}")
+    
+    # load metadata individual
+    meta_ind  = pd.read_excel(meta_ind_path)
+    comp_to_file = {row["nombre_compuesto"]: row["nombre_archivo_csv"] for _, row in meta_ind.iterrows()
+                    }
+    # build individual cache
+    
+    ind_cache = build_individual_cache(meta_ind = meta_ind, ind_dir = ind_dir,
+                                       comp_to_file = comp_to_file, ppm_is_nominal = PPM_IS,
+                                        window_is = WINDOWS_IS, ppm_min = PPM_MIN, ppm_max = PPM_MAX)
+
+    print(f"Individual spectra cached: {len(ind_cache)}")
+    print(ind_cache)
