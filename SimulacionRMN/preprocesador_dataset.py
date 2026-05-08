@@ -843,17 +843,17 @@ if __name__ == "__main__":
     import pickle
 
     # ── General ──────────────────────────────────────────────────────────────
-    ROOT_DIR    = r"C:\Users\tuusuario\Documents\NMR"   # <-- change this
+    ROOT_DIR    = "/home/ray/Documents/Quimica/"   # <-- change this
     OUTPUT_DIR  = os.path.join(ROOT_DIR, "aug")
     RANDOM_SEED = 42
 
     # ── File paths (individual spectra metadata) ──────────────────────────────
-    META_IND_PATH = os.path.join(ROOT_DIR, "data set",
+    META_IND_PATH = os.path.join(ROOT_DIR, "DataSet",
                                  "metadata_espectros_individuales_con_TSP sodico(SI).xlsx")
     IND_DIR       = os.path.join(ROOT_DIR, "Espectros individuales + TSP sodico (SI)")
 
     # ── File paths (generador_espectros inputs) ───────────────────────────────
-    EXCEL_FILENAME      = "perfil metabolico vino.xlsx"
+    EXCEL_FILENAME      = "Perfil metabolico vino.xlsx"
     EXCEL_SHEET         = "General"
     INTERNAL_STD_FILE   = "tsp-d4 sodico.csv"
     INTERNAL_STD_FOLDER = "Moleculas mol"
@@ -861,7 +861,7 @@ if __name__ == "__main__":
     SPECTRA_EXT         = ".csv"
 
     # ── Dataset split ─────────────────────────────────────────────────────────
-    N_TOTAL    = 2000
+    N_TOTAL    = 5
     TRAIN_FRAC = 0.70
     VALID_FRAC = 0.15   # test_frac = 0.15
 
@@ -945,7 +945,7 @@ if __name__ == "__main__":
         phi0_range          = PHI0_RANGE,
         phi1_range          = PHI1_RANGE,
     )
-
+    '''
     # 4) Save to disk
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     for name, data in [("train", aug_train), ("valid", aug_valid), ("test", aug_test)]:
@@ -953,3 +953,4 @@ if __name__ == "__main__":
         with open(path, "wb") as f:
             pickle.dump(data, f)
         print(f"Saved: {path}")
+    '''
