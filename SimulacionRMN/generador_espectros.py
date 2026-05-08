@@ -958,7 +958,6 @@ def generate_mixture_spectra(
 
     return spectra, concs, per_compound_params, mix_metadata
   
-from preprocesador_dataset import build_individual_cache
 
 if __name__ == "__main__":
 
