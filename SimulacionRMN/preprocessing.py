@@ -87,15 +87,15 @@ def _whittaker_smooth(x : np.ndarray, w : np.ndarray, lambda_ : float,
     np.ndarray (float, shape=(N,))
         Smoothed background estimate.
     """
-    X = np.matrix(x)
-    m = X.size
+    
+    m = len(x)
     E = eye(m, format = "csc")
     for _ in range(differences):
         E = E[1:] - E[:-1]
-    W = diags(w, 0, shape = (m, m))
-    A = csc_matrix(W + (lambda_*E.T*E))
-    B = csc_matrix(W*X.T)
-    return np.array(spsolve(A, B))
+    W = diags(w, 0, shape = (m, m), format = 'csc')
+    A = csc_matrix(W + (lambda_*E.T @ E))
+    B = W @ x
+    return spsolve(A, B)
 
 def airPLS(x : np.ndarray, lambda_ : float = 100, porder : int = 1, 
            itermax : int = 15) -> np.ndarray:
@@ -119,7 +119,7 @@ def airPLS(x : np.ndarray, lambda_ : float = 100, porder : int = 1,
     np.ndarray (float, shape=(N,))
         Estimated baseline of the input spectrum.
     """ 
-    x = x.astype(float)
+    x = np.asarray(x, dtype = float)
     m = x.shape[0]
     w = np.ones(m)
     for ii in range(1, itermax + 1):
