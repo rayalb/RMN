@@ -34,7 +34,7 @@ if __name__ == "__main__":
     MAX_SHIFT_PTS = 60
     DEFORMACION = True
     BASELINE_RANGE = (-0.02, 0.02)
-    NOISE_LEVEL = 23.
+    NOISE_LEVEL = 2300.
     REF_REFERENCE_PPM = None
     PCT_NO_PHASE = 0.30
     PCT_MAX_PEAK = 0.20
