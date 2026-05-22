@@ -60,7 +60,7 @@ class SpectrumSimulator:
         self.baseline_range = baseline_range
         self.noise_fraction = noise_fraction
         
-        if random_state in not None:
+        if random_state is not None:
             np.random.seed(random_state)
 
     def simulate(self, spectrum: Spectrum, apply_shift: bool = True,
