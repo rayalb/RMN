@@ -26,4 +26,8 @@ class Spectrum:
         return Spectrum(ppm = self.ppm.copy(),
                         intensity = self.intensity.copy(),
                         name = self.name,
-                        metadata = self.metadata.copy())   
+                        metadata = self.metadata.copy())
+
+@dataclass
+class MixtureSpectrum(Spectrum):
+    composition: dict[str, float] = field(default_factory = dict)   
