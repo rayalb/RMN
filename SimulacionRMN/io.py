@@ -163,6 +163,6 @@ def build_compound_mapping(metadata: pd.DataFrame, compound_col: str = "nombre_c
     mapping from metada.
     """
     return {
-            row[compound_col]: row[filename_col] for _, row in metadata,iterrows()
-        }
+            row[compound_col]: row[filename_col] for _, row in metadata.iterrows()
+            }
     
