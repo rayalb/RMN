@@ -35,7 +35,8 @@ class MixtureSimulator:
         self.library = library
         self.rng = np.random.default_rng(random_state)
 
-    def _check_ppm_compatibility(self, spectra: list[Spectrum]):
+    @staticmethod
+    def _check_ppm_compatibility(spectra: list[Spectrum]) -> None:
         ref_ppm = spectra[0].ppm
 
         for spec in spectra[1:]:
@@ -57,6 +58,9 @@ class MixtureSimulator:
 
         compounds = list(compounds)
         concentrations = np.asarray(concentrations, dtype = float)
+
+        if len(compounds) == 0:
+            raise ValueError("No compounds provided.")
 
         if len(compounds) != len(concentrations):
             raise ValueError("Compounds and concentrations must have the same length.")
@@ -86,11 +90,35 @@ class MixtureSimulator:
                                metadata = {"n_compounds": len(compounds)},
                                composition = composition)
     
+    # Dictionary interface
+
+    def simulate_from_dict(self, composition: dict[str, float],
+                           normalize_concentrations: bool = False) -> MixtureSpectrum:
+        """
+        Generate mixture from a dictionary.
+        Example
+        -------
+            mix = simulator.simulate_from_dict({
+                    "Glucose": 0.4,
+                    "Alanine": 0.6}
+                )
+        """
+        return self.simulate(compounds = list(composition.keys()),
+                             concentrations = list(composition.values()),
+                             normalize_concentrations = normalize_concentrations)
+    
+    
     def simulate_random(self, n_compounds: int | tuple[int, int] = (2, 8),
                         concentration_range: tuple[float, float] = (0.01, 1.0),
                         normalize_concentrations: bool = False) -> MixtureSpectrum:
         """
         Generate a random mixture.
+        
+        Parameters
+        ----------
+            n_compounds : Number of compounds.
+                            If tuple(min, max), a random number is sampled.
+            concentration_range : Uniform sampling interval
         
         Example:
         --------
@@ -125,6 +153,7 @@ class MixtureSimulator:
 
         return mixtures
     
+    @staticmethod
     def summary(self, mixture: MixtureSpectrum):
         """
         Print composition.
