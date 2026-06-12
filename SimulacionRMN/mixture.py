@@ -16,7 +16,7 @@ from typing import Sequence
 import numpy as np
 
 from .spectrum import Spectrum, MixtureSpectrum
-from .library import SepctrumLibrary
+from .library import SpectrumLibrary
 
 
 
@@ -88,7 +88,7 @@ class MixtureSimulator:
     
     def simulate_random(self, n_compounds: int | tuple[int, int] = (2, 8),
                         concentration_range: tuple[float, float] = (0.01, 1.0),
-                        normalize_concetrations: bool = False) -> MixtureSpectrum:
+                        normalize_concentrations: bool = False) -> MixtureSpectrum:
         """
         Generate a random mixture.
         
@@ -113,7 +113,7 @@ class MixtureSimulator:
         concentrations = self.rng.uniform(concentration_range[0], 
                                          concentration_range[1], size = n)
         return self.simulate(compounds = compounds, concentrations = concentrations,
-                             normalize_concentrations = normalize_concetrations)
+                             normalize_concentrations = normalize_concentrations)
     
     def generate_batch(self, n_mixtures: int, **kwargs) -> list[MixtureSpectrum]:
         """
@@ -131,6 +131,6 @@ class MixtureSimulator:
         """
         print(f"Mixture with {len(mixture.composition)} compounds")
 
-        for comp, conc in (mixture.composition.item()):
+        for comp, conc in mixture.composition.item():
             print(f"{comp: < 25} {conc:.4f}")
         
