@@ -18,7 +18,8 @@ It can be work with:
 """
 
 from __future__ import annotations
-from typing import Optional
+
+from dataclasses import dataclass
 import warnings
 
 import numpy as np
@@ -27,6 +28,27 @@ from scipy.sparse import csc_matrix, eye, diags
 from scipy.sparse.linalg import spsolve
 
 from .spectrum import Spectrum
+
+
+@dataclass
+class PreprocessingConfig:
+    """
+    Configuration for preprocessing pipelines.
+    """
+
+    ppm_is_nominal: float = 0.0
+    windows_is: float = 0.2
+
+    ppm_min: float = 0.0
+    ppm_max: float = 10.0
+
+    lambda_: float = 100.0
+    porder: int = 1
+    itermax: int = 15
+
+    bin_factor: int = 1
+
+    normalize: bool = True
 
 
 # Binning
@@ -60,7 +82,7 @@ def apply_binning(spectrum : Spectrum, bin_factor : int = 1) -> Spectrum:
     ppm_binned = ppm[:n_trim].reshape(-1, bin_factor).mean(axis = 1)
 
     return Spectrum(ppm = ppm_binned, intensity = intensity_binned, 
-                    metadata = spectrum.metadata)
+                    metadata = dict(spectrum.metadata or {}))
 
 
 # airPLS (see paper)
@@ -125,20 +147,31 @@ def airPLS(x : np.ndarray, lambda_ : float = 100, porder : int = 1,
     for ii in range(1, itermax + 1):
         z = _whittaker_smooth(x, w, lambda_, porder)
         d = x - z
-        dssn = np.abs(d[d < 0].sum())
-        if dssn < 0.001*(abs(x)).sum() or ii == itermax:
-            if ii == itermax:
-                warnings.warn(
-                    "airPLS: maximum iterations reached - Baseline may by inaccurate.",
-                    UserWarning,
-                    stacklevel = 2 
-                )
-            break
+        negative = d[d<0]
+        dssn = np.abs(negative.sum())
+        if dssn < 0.001*(abs(x)).sum() 
+            break 
+        if ii == itermax:
+            warnings.warn(
+                "airPLS: maximum iterations reached - Baseline may by inaccurate.",
+                UserWarning, stacklevel = 2)
+            
         w[d >= 0] = 0
-        w[d < 0] = np.exp(ii*np.abs(d[d < 0])/dssn)
-        w[0] = np.exp(ii*(d[d < 0]).max()/dssn)
-        w[-1] = w[0]
+        if len(negative) > 0:
+            w[d < 0] = np.exp(ii*np.abs(negative)/dssn)
+            w[0] = np.exp(ii*negative.max()/dssn)
+            w[-1] = w[0]
     return z
+
+def estimate_baseline(spectrum: Spectrum, lambda_: float = 100, porder: int =1, 
+                      itermax: int = 15) -> np.ndarray:
+    """
+    Estimate baseline
+    """
+
+    return airPLS(spectrum.intensity, lambda_ = lambda_, porder = porder,
+                  itermax = itermax)
+
 
 def baseline_correct(spectrum : Spectrum, lambda_ : float = 100, porder : int = 1,
                      itermax : int = 15) -> Spectrum:
@@ -147,10 +180,10 @@ def baseline_correct(spectrum : Spectrum, lambda_ : float = 100, porder : int = 
     
     Returns
     -------
-        Spectrim: Baseline-corrected spectrum.
+        Spectrum: Baseline-corrected spectrum.
     """
 
-    baseline = airPLS(spectrum.intensity, lambda_ = lambda_, porder = porder,
+    baseline = estimate_baseline(spectrum, lambda_ = lambda_, porder = porder,
                       itermax = itermax)
     corrected = (spectrum.intensity - baseline).astype(np.float)
     metadata = dict(spectrum.metadata or {})
@@ -177,7 +210,7 @@ def crop_ppm_range(spectrum : Spectrum, ppm_min : float = 0.0,
     """
     mask = (spectrum.ppm >= ppm_min) & (spectrum.ppm <= ppm_max)
     return Spectrum(ppm = spectrum.ppm[mask], intensity = spectrum.intensity[mask],
-                    metadata = spectrum.metadata)
+                    metadata = dict(spectrum.metadata or {}))
 
 # Internal standard normalization
 
@@ -210,14 +243,14 @@ def normalize_by_internal_standard(spectrum : Spectrum, ppm_is_nominal : float =
     mask_is = (ppm >= ppm_is_nominal - window) & (ppm <= ppm_is_nominal + window)
 
     if not np.any(mask_is):
-        warnings.warm(f"IS peak not found in window [{ppm_is_nominal - window:.2f},"
+        warnings.warm(f"Internal-standard peak not found in window [{ppm_is_nominal - window:.2f},"
                       f"{ppm_is_nominal + window:.2f}] ppm. Returning unnormalized spectrum",
                       UserWarning, stacklevel = 2)
         return spectrum.copy()
     
     peak_height = np.max(np.abs(intensity[mask_is]))
     if peak_height < eps:
-        warnings.warm("IS peak height is below eps threshold. Returning unnormalized spectrum",
+        warnings.warm("Internal-standard peak height is below eps threshold. Returning unnormalized spectrum",
                       UserWarning, stacklevel = 2)
         return spectrum.copy()
     
@@ -230,7 +263,8 @@ def normalize_by_internal_standard(spectrum : Spectrum, ppm_is_nominal : float =
 
 def preprocess_spectrum(spectrum : Spectrum, ppm_is_nominal : float = 0.0, window_is : float = 0.2,
                         ppm_min : float = 0.0, ppm_max : float = 10.0, lambda_ : float = 100,
-                        porder : int = 1, itermax : int = 15, bin_factor : int = 1) -> Spectrum:
+                        porder : int = 1, itermax : int = 15, bin_factor : int = 1, 
+                        normalize : bool = True) -> Spectrum:
     """
     Full preprocessing pipeline for a single NMR spectrum:
         1. airPLS baseline correction.
@@ -259,6 +293,8 @@ def preprocess_spectrum(spectrum : Spectrum, ppm_is_nominal : float = 0.0, windo
     bin_factor     : int
         Binning factor — average every bin_factor points. Default: 1 (no binning).
         Recommended values: 1 (none), 2, 4. Max safe value depends on peak width.
+    normalize      : bool
+        if True normalize by standard internal.
 
     Returns
     -------
@@ -269,8 +305,31 @@ def preprocess_spectrum(spectrum : Spectrum, ppm_is_nominal : float = 0.0, windo
                                  itermax = itermax)
     processed = crop_ppm_range(processed, ppm_min = ppm_min, ppm_max = ppm_max)
 
-    processed = normalize_by_internal_standard(processed, ppm_is_nominal = ppm_is_nominal,
-                                               window = window_is)
+    if normalize:
+        processed = normalize_by_internal_standard(processed, ppm_is_nominal = ppm_is_nominal,
+                                                   window = window_is)
+    
     processed = apply_binning(processed, bin_factor = bin_factor)
 
     return processed
+
+def preprocess_many(spectra: list[Spectrum], **kwargs) -> list[Spectrum]:
+    """
+    Apply preprocessing to many spectra
+    """
+    return [preprocess_spectrum(spec, **kwargs) for spec in spectra]
+
+
+# Public API
+
+__all__ = [
+    "PreprocessingConfig",
+    "apply_binning",
+    "airPLS",
+    "estimate_baseline",
+    "baseline_correct",
+    "crop_ppm_range",
+    "normalize_by_internal_standard",
+    "preprocess_spectrum,"
+    "preprocess_many"
+]
