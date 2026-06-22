@@ -16,8 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Tuple, Any
 
-
 import numpy as np
+import matplotlib.pyplot as plt
 
 @dataclass
 class Spectrum:
@@ -34,7 +34,7 @@ class Spectrum:
     ppm: np.ndarray 
     intensity: np.ndarray 
     name: str | None = None
-    metadata: dict[str, Any] = field(default_factory = dict)
+    metadata: Dict[str, Any] = field(default_factory = dict)
 
     def __post_init__(self):
         self.ppm = np.asarray(self.ppm, dtype = float)
@@ -46,6 +46,10 @@ class Spectrum:
     @property
     def n_points(self) -> int:
         return len(self.ppm)
+    
+    @property
+    def shape(self):
+        return self.intensity.shape
     
     def copy(self) -> "Spectrum":
         return Spectrum(ppm = self.ppm.copy(),
@@ -82,6 +86,42 @@ class Spectrum:
         """
         return self.ppm, self.intensity
     
+    def crop(self, ppm_min: float, ppm_max: float) -> "Spectrum":
+        """
+        Return cropped copy.
+        """
+        mask = (self.ppm >= ppm_min) & (self.ppm <= ppm_max)
+
+        return Spectrum(ppm = self.ppm[mask], intensity = self.intensity[mask],
+                        name = self.name, metadata = self.metadata.copy())
+
+    def plot(self, ax = None, figsize = (10, 4), invert_ppm: bool = True,
+             title: Optional[str] = None, **kwargs):
+        """
+        Plot spectrum.
+        Parameters
+        ----------
+            invert_ppm : bool. NMR convention uses decreasing ppm.
+        """
+        if ax is None:
+            fig, ax = plt.subplots(figsize = figsize)
+
+        ax.plot(self.ppm, self.intensity, **kwargs)
+
+        if invert_ppm:
+            ax.invert_xaxis()
+
+        ax.set_xlabel("ppm")
+        ax.set_ylabel("Intensity")
+
+        if title is None:
+            title = self.name
+        if title is not None:
+            ax.set_title(title)
+
+        return ax
+
+
     def __len__(self):
         return len(self.ppm)
     
@@ -113,4 +153,8 @@ class MixtureSpectrum(Spectrum):
                                name = self.name, metadata = self.metadata.copy(),
                                composition = self.composition.copy())
     
-    
+    def summary(self):
+        print(f"Mixture with {len(self.composition)} compounds.")
+        for comp, conc in self.composition.items():
+            print(f"{comp:<30} {conc:.4f}")
+
