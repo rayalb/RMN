@@ -29,12 +29,12 @@ class SpectrumLibrary:
     
     Examples
     --------
-    lib = SpectrumLibrary(metadata = "metadata.xlsx",
+    lib = SpectrumLibrary(metadata_path = "metadata.xlsx",
                         spectra_dir = "individual_spectra")
                          
-    lib.load_metadata()
     glucose = lob.get("Glucose")
-    glucose_pre = lib.get("Glucose", preprocess = True)   
+    glucose_pre = lib.get("Glucose", preprocess = True, ppm_min = 0.0,
+                            ppm_max = 10)   
     """
 
     def __init__(self, metadata_path: str | Path, spectra_dir: str | Path):
@@ -45,7 +45,9 @@ class SpectrumLibrary:
         self.comp_to_file: dict[str, str] = {}
 
         self.cache_raw: dict[str, Spectrum] = {}
-        self.cache_processed: dict[str, Spectrum] = {}
+        self.cache_processed: dict[tuple, Spectrum] = {}
+
+        self.load_metadata()
 
     def load_metadata(self) -> None:
         """
@@ -62,17 +64,40 @@ class SpectrumLibrary:
                              row["nombre_archivo_csv"]
                              for _, row in metadata.iterrows()
                             }
+    
+    def metadata_row(self, compound_name: str) ->pd.Series:
+        """
+        Retrieves metadata row corresponding to a compound
+        """
+        if self.metadata is None:
+            self.load_metadata()
+
+        rows = self.metadata[self.metadata["nombre_compuesto"] == compound_name]
+
+        if len(rows) == 0:
+            raise KeyError(f"Compound '{compound_name}' not found.")
         
+        return rows.iloc[0]
+    
+    def filename(self, compound_name: str) -> str:
+        """
+        Return associated spectrum filename.
+        """
+
+        if compound_name not in self.comp_to_file:
+            raise KeyError(f"Compound '{compound_name}' not found.")
+        
+        return self.comp_to_file[compound_name]
+    
+
     def _load_spectrum_from_disk(self, compound_name: str) -> Spectrum:
         """
         Load a spectrum from disk
-        Returns
+
+                Returns
         -------
         Spectrum
         """
-
-        if self.metadata is None:
-            self.load_metadata()
 
         if compound_name not in self.comp_to_file:
             raise KeyError(f"Compound '{compound_name}' not found.")
@@ -84,7 +109,7 @@ class SpectrumLibrary:
             raise FileNotFoundError(filepath)
         
         df = pd.read_csv(filepath, sep = "\t")
-        
+
         ppm = df.iloc[:, 0].to_numpy(dtype = float)
         intensity = df.iloc[:, 1].to_numpy(dtype = float)
 
@@ -128,37 +153,46 @@ class SpectrumLibrary:
         """
         Load all compounds into cache.
         """
-        if self.metadata is None:
-            self.load_metadata()
-
-        for compound in self.comp_to_file:
+        for compound in self.compounds:
             self.get(compound, preprocess = preprocess, **preprocess_kwargs)
 
+    def clear_cache(self) -> None:
+        """
+        Clear all cached spectra
+        """
+
+        self.cache_raw.clear()
+        self.cache_processed.clear()
+        
     def compounds(self) -> list[str]:
         """
         List all compounds names.
         """
-        if self.metadata is None:
-            self.load_metadata()
-
         return list(self.comp_to_file.keys())
 
     def __len__(self) -> int:
-
-        if self.metadata is None:
-            self.load_metadata()
 
         return len(self.comp_to_file)
 
     def __contains__(self, compound_name: str) -> bool:
 
-        if self.metadata is None:
-            self.load_metadata()
-
         return compound_name in self.comp_to_file
     
+    def __repr__(self) -> str:
+        return f"SpectrumLibrary(n_compounds = {len(self)})"
+    
     def summary(self) -> None:
-        print(f"SpectrumLibrary({len(self)} compounds)")
+        """
+        Print library summary
+        """
+        print("Spectrum Library")
+        print("-"*40)
+
+        print(f"Compounds : {len(self)}")
+        print(f"Raw cached : {len(self.cache_raw)}")
+        print(f"Processed cached : {len{self.cache_processed}}")
+
+
 
         
 
