@@ -190,7 +190,7 @@ class SpectrumLibrary:
 
         print(f"Compounds : {len(self)}")
         print(f"Raw cached : {len(self.cache_raw)}")
-        print(f"Processed cached : {len{self.cache_processed}}")
+        print(f"Processed cached : {len(self.cache_processed)}")
 
 
 
