@@ -149,7 +149,7 @@ class MixtureSpectrum(Spectrum):
         return list(self.composition)
     
     def copy(self) -> "MixtureSpectrum":
-        return MixtureSpectrum(ppm = self.ppm.copy(), intensity = self.intensity.copy()
+        return MixtureSpectrum(ppm = self.ppm.copy(), intensity = self.intensity.copy(),
                                name = self.name, metadata = self.metadata.copy(),
                                composition = self.composition.copy())
     
