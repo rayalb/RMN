@@ -36,10 +36,9 @@ class SpectrumSimulator:
         self.phi1_range = phi1_range
         self.baseline_range = baseline_range
         self.noise_fraction = noise_fraction
-        
-        if random_state is not None:
-            np.random.seed(random_state)
 
+        self.rng = np.random.default_rng(random_state)
+        
     def simulate(self, spectrum: Spectrum, apply_shift: bool = True,
                  apply_broadening: bool = True,
                  apply_phase: bool = True,
@@ -86,7 +85,7 @@ class SpectrumSimulator:
                         name = spectrum.name, metadata = metadata)
     
     def _apply_shift(self, y: np.ndarray) -> tuple:
-        shift_pts = int(np.random.normal(loc = 0, scale = self.max_shift/3))
+        shift_pts = int(self.rng.normal(loc = 0, scale = self.max_shift/3))
         shift_pts = int(np.clip(shift_pts, -self.max_shift, self.max_shift))
         
         # shifted = ng.process.porc_base.cs(y, shift_pts)
@@ -104,7 +103,7 @@ class SpectrumSimulator:
         metadata = {}
 
         # Gaussian broadening
-        sigma = np.random.uniform(*self.gauss_sigma_range)
+        sigma = self.rng.uniform(*self.gauss_sigma_range)
         metadata["gauss_sigma"] = float(sigma)
         if sigma > 0:
             L = max(3, int(6*sigma) + 1)
@@ -114,13 +113,13 @@ class SpectrumSimulator:
             y = np.convolve(y, g, mode = 'same')
 
         # Lorentzian broadening
-        gamma = np.random.uniform(*self.lorentz_gamma_range)
+        gamma = self.rng.uniform(*self.lorentz_gamma_range)
         metadata["lorentz_gamma"] = float(gamma)
         if gamma > 0:
             L = max(3, int(10*gamma) + 1)
             x = np.arange(-(L//2), L//2 + 1)
             l = 1.0/(1.0 + (x/gamma)**2)
-            i /= l-sum()
+            i /= l.sum()
             y = np.convolve(y, l, mode = 'same')
         
         # Asymmetric tail
@@ -129,10 +128,10 @@ class SpectrumSimulator:
         metadata["asym_amp"] = 0.0
         metadata["asym_dir"] = 0
 
-        if np.random.rand() < self.asym_prob and self.asym_decay_pts > 0:
+        if self.rng.random() < self.asym_prob and self.asym_decay_pts > 0:
             asym_applied = True
-            amp = np.random.uniform(*self.asym_amp_range)
-            direction = int(np.random.choice([-1, 1]))
+            amp = self.rng.uniform(*self.asym_amp_range)
+            direction = int(self.rng.choice([-1, 1]))
 
             metadata["asym_applied"] = True
             metadata["asym_amp"] = float(amp)
@@ -155,8 +154,8 @@ class SpectrumSimulator:
         return y, metadata
     
     def _apply_phase(self, y_complex: np.ndarray, ppm: np.ndarray) -> tuple:
-        phi0 = np.random.uniform(*self.phi0_range)
-        phi1 = np.random.uniform(*self.phi1_range)
+        phi0 = self.rng.uniform(*self.phi0_range)
+        phi1 = self.rng.uniform(*self.phi1_range)
 
         ref_ppm = float((np.max(ppm) + np.min(ppm))/2.0)
         phi_rad = np.deg2rad(phi0 + phi1*(ppm - ref_ppm))
@@ -167,14 +166,14 @@ class SpectrumSimulator:
         return y_out, metadata
     
     def _apply_baseline(self, y: np.ndarray) -> tuple:
-        offset = np.random.uniform(*self.baseline_range)
+        offset = self.rng.uniform(*self.baseline_range)
         y = y + offset
         return y, float(offset)
     
     def _apply_noise(self, y: np.ndarray) -> tuple:
         rms = np.sqrt(np.mean(y**2)) + 1e-12
         sigma = self.noise_fraction*rms
-        noise = np.random.normal(loc = 0.0, scale = sigma, size = y.shape)
+        noise = self.rng.normal(loc = 0.0, scale = sigma, size = y.shape)
         y_noisy = y + noise
         return y_noisy, float(sigma)
     
