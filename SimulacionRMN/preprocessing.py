@@ -149,7 +149,7 @@ def airPLS(x : np.ndarray, lambda_ : float = 100, porder : int = 1,
         d = x - z
         negative = d[d<0]
         dssn = np.abs(negative.sum())
-        if dssn < 0.001*(abs(x)).sum() 
+        if dssn < 0.001*(abs(x)).sum(): 
             break 
         if ii == itermax:
             warnings.warn(
