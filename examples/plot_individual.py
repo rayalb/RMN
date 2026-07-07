@@ -4,7 +4,6 @@ Example:
 Load an individual spectrum and plot it.
 """
 
-import os
 from pathlib import Path
 
 from SimulacionRMN.library import SpectrumLibrary
