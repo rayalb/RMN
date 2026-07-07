@@ -4,21 +4,21 @@ Example:
 Load an individual spectrum and plot it.
 """
 
+import os
 from pathlib import Path
 
 from SimulacionRMN.library import SpectrumLibrary
 
 # Path
 
-metadata = Path("data/metadata_individual.xlsx")
-spectra = Path("data/individual_spectra")
+root_dir = Path("/home/Documents/")
+
+metadata = (root_dir, "RMN", "metadata_espectros_individuales_con_TSP sodico(SI).xlsx")
+spectra = (root_dir, "RMN", "Espectros individuales + TSP sodico (SI)")
 
 # Load Library
 
-library = SpectrumLibrary(metadata_path = metadata)
-spectra_dir = spectra
-
-library.load_metadata()
+library = SpectrumLibrary(metadata_path = metadata, spectra_dir = spectra)
 
 print(library)
 
