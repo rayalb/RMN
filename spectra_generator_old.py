@@ -84,7 +84,7 @@ def plot_combined_spectra(spectra, master_df, output_path=None):
     ax.invert_xaxis()
     ax.set_title("NMR Spectras")
     ax.set_xlabel("ppm")
-    ax.set_ylabel{"Intensity"}
+    ax.set_ylabel("Intensity")
     ax.legend(fontsize = 8)
 
     fig.tight_layout()
