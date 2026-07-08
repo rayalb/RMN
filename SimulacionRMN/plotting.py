@@ -61,7 +61,6 @@ def plot_spectra(spectra: Sequence[Spectrum], labels: Sequence[str] | None = Non
         fig, ax = plt.subplots(figsize = (10, 4))
 
     for ii, spec in enumerate(spectra):
-        label = None
         if label is not None:
             label = labels[ii]
         elif spec.name:
@@ -153,7 +152,7 @@ def plot_stack(spectra: Sequence[Spectrum], offset: float = 1.0,
 
     ax.legend()
 
-    if show():
+    if show:
         plt.show()
 
     return ax
