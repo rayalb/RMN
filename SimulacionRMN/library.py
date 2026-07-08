@@ -114,6 +114,7 @@ class SpectrumLibrary:
         intensity = df.iloc[:, 1].to_numpy(dtype = float)
 
         return Spectrum(ppm = ppm, intensity = intensity.astype(np.float32),
+                        name = compound_name,
                         metadata = {"compound": compound_name,
                                     "filename": filename})
     
