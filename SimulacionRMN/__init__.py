@@ -10,4 +10,5 @@ from .spectrum import Spectrum, MixtureSpectrum
 from .library import SpectrumLibrary
 from .augmentation import SpectrumSimulator
 from .mixture import MixtureSimulator
+from .plotting import *
 
