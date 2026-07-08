@@ -145,7 +145,7 @@ class SpectrumLibrary:
 
         if cache_key not in self.cache_processed:
             raw = self.get_raw(compound_name)
-            processed = preprocess_spectrum(raw, **preprocess_spectrum)
+            processed = preprocess_spectrum(raw, **preprocess_kwargs)
             self.cache_processed[cache_key] = processed
 
         return self.cache_processed[cache_key].copy()
