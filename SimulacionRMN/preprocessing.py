@@ -185,7 +185,7 @@ def baseline_correct(spectrum : Spectrum, lambda_ : float = 100, porder : int = 
 
     baseline = estimate_baseline(spectrum, lambda_ = lambda_, porder = porder,
                       itermax = itermax)
-    corrected = (spectrum.intensity - baseline).astype(np.float)
+    corrected = (spectrum.intensity - baseline).astype(np.float32)
     metadata = dict(spectrum.metadata or {})
     metadata["baseline_corrected"] = True
 
