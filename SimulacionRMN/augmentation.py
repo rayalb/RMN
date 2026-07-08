@@ -113,7 +113,7 @@ class SpectrumSimulator:
             L = max(3, int(10*gamma) + 1)
             x = np.arange(-(L//2), L//2 + 1)
             l = 1.0/(1.0 + (x/gamma)**2)
-            i /= l.sum()
+            l /= l.sum()
             y = np.convolve(y, l, mode = 'same')
         
          # Asymmetric tail
@@ -158,7 +158,7 @@ class SpectrumSimulator:
         metadata["phi1"] = float(phi1)
 
         return Spectrum(ppm = spectrum.ppm.copy(),
-                        intensity = analytic.real.astype(np.floate32),
+                        intensity = analytic.real.astype(np.float32),
                         name = spectrum.name, metadata = metadata)
     
     def baseline(self, spectrum: Spectrum) -> Spectrum:
@@ -171,7 +171,7 @@ class SpectrumSimulator:
                         name = spectrum.name, metadata = metadata)
     
     def noise(self, spectrum: Spectrum) -> Spectrum:
-        rms = np.sqrt(np.mean(spectrum.intesity**2))
+        rms = np.sqrt(np.mean(spectrum.intensity**2))
         sigma = self.noise_fraction*rms
         noise = self.rng.normal(loc = 0.0, scale = sigma, size = len(spectrum))
         y = spectrum.intensity + noise 
