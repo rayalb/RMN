@@ -116,9 +116,11 @@ class Spectrum:
 
         if title is None:
             title = self.name
+            ax.set_title(title)
         if title is not None:
             ax.set_title(title)
 
+        plt.show()
         return ax
 
 
