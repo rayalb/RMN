@@ -61,7 +61,7 @@ def plot_spectra(spectra: Sequence[Spectrum], labels: Sequence[str] | None = Non
         fig, ax = plt.subplots(figsize = (10, 4))
 
     for ii, spec in enumerate(spectra):
-        if label is not None:
+        if labels is not None:
             label = labels[ii]
         elif spec.name:
             label = spec.name
