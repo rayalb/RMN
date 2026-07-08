@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from SimulacionRMN.library import SpectrumLibrary
+from SimulacionRMN.augmentation import SpectrumSimulator
 
 root_dir = Path("/home/ray/Documents/Quimica/") # INTI
 
@@ -18,3 +19,9 @@ library = SpectrumLibrary(metadata_path = metadata, spectra_dir = spectra)
 glucose = library.get("glucosa", preprocess = True)
 
 glucose.plot()
+
+
+sim = SpectrumSimulator()
+aug_glucose = sim(glucose, apply_scaling = False, apply_phase = False)
+
+aug_glucose.plot()
