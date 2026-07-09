@@ -9,7 +9,8 @@ from pathlib import Path
 from SimulacionRMN.library import SpectrumLibrary
 from SimulacionRMN.augmentation import SpectrumSimulator
 
-root_dir = Path("/home/ray/Documents/Quimica/") # INTI
+root_dir = Path("/home/ray/Documents/RMN/") # CASA
+#root_dir = Path("/home/ray/Documents/Quimica/") # INTI
 
 metadata = os.path.join(root_dir, "DataSet", "metadata_espectros_individuales_con_TSP sodico(SI).xlsx")
 spectra = os.path.join(root_dir, "Espectros individuales + TSP sodico (SI)")
