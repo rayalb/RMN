@@ -139,9 +139,17 @@ class Spectrum:
 class MixtureSpectrum(Spectrum):
     """
     Spectrum generated from multiple compounds.
+
+    Parameters
+    ----------
+    composition : dict[str, float], Dictionary with compound names and their concentrations.
+    components : dict[str, Spectrum], Dictionary with compound names and their corresponding spectra.
+    simulator_metadata : dict[str, Any], Optional metadata from the simulator.
     """
     composition: dict[str, float] = field(default_factory = dict)   
-
+    components: dict[str, Spectrum] = field(default_factory = dict)
+    simulator_metadata: dict[str, Any] = field(default_factory = dict)
+    
     @property
     def compounds(self) -> list[str]:
         return list(self.composition.keys())
