@@ -8,7 +8,7 @@ from pathlib import Path
 
 from SimulacionRMN.library import SpectrumLibrary
 from SimulacionRMN.mixture import MixtureSimulator
-from SimulacionRMN.plotting import plot_mixture
+from SimulacionRMN.plotting import plot_mixture, plot_mixture_components
 
 
 root_dir = Path("/home/ray/Documents/RMN/") # CASA
@@ -33,9 +33,10 @@ plot_mixture(mixture)
 # Random mixtures
 
 sim_random_mixtures = MixtureSimulator(library, random_state = 2)
-mixtures = sim_random_mixtures.simulate_random(n_compounds = 4, normalize_concentrations = False)
+mixtures = sim_random_mixtures.simulate_random(n_compounds = 4, normalize_concentrations = False,
+                                               store_components = True)
 
 print(mixtures.composition)
 plot_mixture(mixtures)
 
-                               
+plot_mixture_components(mixtures)
