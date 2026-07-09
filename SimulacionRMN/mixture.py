@@ -46,7 +46,7 @@ class MixtureSimulator:
                 raise ValueError("Spectra are not aligned on the same ppm axis.")
             
     def simulate(self, compounds: Sequence[str], concentrations: Sequence[float],
-                 normalize_concentrations: bool = False) -> MixtureSpectrum:
+                 normalize_concentrations: bool = False, store_components: bool = False) -> MixtureSpectrum:
         """
         Generates a mixture from specified compounds.
         
@@ -74,6 +74,10 @@ class MixtureSimulator:
 
         spectra = [self.library.get_raw(comp) for comp in compounds]
 
+        components = {}
+        if store_components:
+            components = {comp: spec.copy() for comp, spec in zip(compounds, spectra)}
+
         self._check_ppm_compatibility(spectra)
 
         ppm = spectra[0].ppm.copy()
@@ -87,8 +91,11 @@ class MixtureSimulator:
             composition[comp] = float(conc)
 
         return MixtureSpectrum(ppm = ppm, intensity = mixture.astype(np.float32),
+                               name = "Mixture", 
                                metadata = {"n_compounds": len(compounds)},
-                               composition = composition)
+                               composition = composition, components = components,
+                               simulator_metadata = {"normalize_concentrations": normalize_concentrations,
+                                                                                "store_components": store_components})
     
     # Dictionary interface
 
@@ -110,7 +117,7 @@ class MixtureSimulator:
     
     def simulate_random(self, n_compounds: int | tuple[int, int] = (2, 8),
                         concentration_range: tuple[float, float] = (0.01, 1.0),
-                        normalize_concentrations: bool = False) -> MixtureSpectrum:
+                        normalize_concentrations: bool = False, store_components: bool = False) -> MixtureSpectrum:
         """
         Generate a random mixture.
         
@@ -141,7 +148,7 @@ class MixtureSimulator:
         concentrations = self.rng.uniform(concentration_range[0], 
                                          concentration_range[1], size = n)
         return self.simulate(compounds = compounds, concentrations = concentrations,
-                             normalize_concentrations = normalize_concentrations)
+                             normalize_concentrations = normalize_concentrations, store_components = store_components)
     
     def generate_batch(self, n_mixtures: int, **kwargs) -> list[MixtureSpectrum]:
         """
@@ -153,6 +160,17 @@ class MixtureSimulator:
 
         return mixtures
     
+    def get_compounds(self, mixture: MixtureSpectrum) -> dict[str, Spectrum]:
+        """
+        Return the spectra corresponding to the compounds presetn in a
+        mixture.
+        Is the mixture already stores the spectra, they are returned directly.
+        Otherwise, they are loaded from the library.
+        """
+        if mixture.components:
+            return mixture.components
+        return {comp: self.library.get_raw(comp) for comp in mixture.composition}
+
     @staticmethod
     def summary(self, mixture: MixtureSpectrum):
         """
