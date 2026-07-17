@@ -129,7 +129,7 @@ class SpectrumSimulator:
 
             L = max(5, int(5*self.asym_decay_pts))
             x = np.arange(L)
-            decay = np.exp(-x/self.asym_decay_points)
+            decay = np.exp(-x/self.asym_decay_pts)
             decay /= decay.sum()
 
             kernel = np.zeros(2*L+1)
