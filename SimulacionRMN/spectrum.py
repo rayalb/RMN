@@ -26,56 +26,77 @@ class Spectrum:
     Parameters
     ----------
     ppm: np.ndarray, Chemical shift axis.
-    intensity : np.ndarray, Real-value spectrum intesisities.
+    real: np.ndarray, real-part  of the spectrum.
+    img: np.ndarray, imaginary-part of the spectrum.
+            If None, the spectrum is considered real.    
     name : str, Optiona spectrum name.
             default = None
     metadata : dict, Optional metada dictionary
     """
     ppm: np.ndarray 
-    intensity: np.ndarray 
+    real: np.ndarray
+    imag: np.ndarray | None = None 
     name: str | None = None
     metadata: Dict[str, Any] = field(default_factory = dict)
 
     def __post_init__(self):
         self.ppm = np.asarray(self.ppm, dtype = float)
-        self.intensity = np.asarray(self.intensity, dtype = np.float32)
+        self.real = np.asarray(self.real, dtype = np.float32)
 
-        if len(self.ppm) != len(self.intensity):
-            raise ValueError("ppm and intensity must have the same length.")
-
+        if self.imag is not None:
+            self.imag = np.asarray(self.imag, dtype = np.float32)
+            if len(self.ppm) != len(self.imag):
+                raise ValueError("ppm and imag must have the same length.")
+        
+        if len(self.ppm) != len(self.real):
+            raise ValueError("ppm and real must have the same length.")
+        
+    @property
+    def intensity(self) -> np.ndarray:
+        return self.real
+    
+    @property
+    def complex(self) -> np.ndarray:
+        if self.imag is None:
+            return self.real.astype(np.complex64)
+        else:
+            return self.real.astype(np.complex64) + 1j*self.imag.astype(np.complex64)
+    
     @property
     def n_points(self) -> int:
         return len(self.ppm)
     
     @property
     def shape(self):
-        return self.intensity.shape
+        return self.real.shape
     
     def copy(self) -> "Spectrum":
         return Spectrum(ppm = self.ppm.copy(),
-                        intensity = self.intensity.copy(),
+                        real = self.real.copy(),
+                        imag = None if self.imag is None else self.imag.copy(),
                         name = self.name,
                         metadata = self.metadata.copy())
     
     def max(self) -> float:
-        return float(np.max(self.intensity))
+        return float(np.max(self.real))
     
     def min(self) -> float:
-        return float(np.min(self.intensity))
+        return float(np.min(self.real))
     
     def area(self) -> float:
-        return float(np.trapz(self.intensity, self.ppm))
+        return float(np.trapzoid(self.real, self.ppm))
     
     def normalize(self) -> "Spectrum":
         """
         Normalize by maximum absolute peak.
         """
-        peak = np.max(np.abs(self.intensity))
+        peak = np.max(np.abs(self.complex))
 
         if peak == 0:
             return self.copy()
         
-        return Spectrum(ppm = self.ppm.copy(), intensity = self.intensity/peak,
+        return Spectrum(ppm = self.ppm.copy(), real = self.real/peak,
+                        imag = None if self.imag is None else self.imag/peak,
                         name = self.name, metadata = self.metadata.copy())
     
     def to_numpy(self) -> tuple[np.ndarray, np.ndarray]:
@@ -84,7 +105,7 @@ class Spectrum:
         -------
         (ppm, intensity)
         """
-        return self.ppm, self.intensity
+        return self.ppm, self.real, self.imag
     
     def crop(self, ppm_min: float, ppm_max: float) -> "Spectrum":
         """
@@ -92,7 +113,8 @@ class Spectrum:
         """
         mask = (self.ppm >= ppm_min) & (self.ppm <= ppm_max)
 
-        return Spectrum(ppm = self.ppm[mask], intensity = self.intensity[mask],
+        return Spectrum(ppm = self.ppm[mask], real = self.real[mask],
+                        imag = None if self.imag is None else self.imag[mask],
                         name = self.name, metadata = self.metadata.copy())
 
     def plot(self, ax = None, figsize = (10, 4), invert_ppm: bool = True,
@@ -106,7 +128,7 @@ class Spectrum:
         if ax is None:
             fig, ax = plt.subplots(figsize = figsize)
 
-        ax.plot(self.ppm, self.intensity, **kwargs)
+        ax.plot(self.ppm, self.real, **kwargs)
 
         if invert_ppm:
             ax.invert_xaxis()
@@ -159,9 +181,12 @@ class MixtureSpectrum(Spectrum):
         return list(self.composition)
     
     def copy(self) -> "MixtureSpectrum":
-        return MixtureSpectrum(ppm = self.ppm.copy(), intensity = self.intensity.copy(),
+        return MixtureSpectrum(ppm = self.ppm.copy(), real = self.real.copy(),
+                               imag = None if self.imag is None else self.imag.copy(),
                                name = self.name, metadata = self.metadata.copy(),
-                               composition = self.composition.copy())
+                               composition = self.composition.copy(),
+                               components = {k: v.copy() for k, v in self.components.items()},
+                               simulator_metadata = self.simulator_metadata.copy())
     
     def summary(self):
         print(f"Mixture with {len(self.composition)} compounds.")
