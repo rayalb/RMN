@@ -19,11 +19,11 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from spectrum import Spectrum
+from .spectrum import Spectrum
 
 PathLike = Union[str, Path]
 
-def read_spectrum_csv(path: PathLike, sep: str = "\t") -> Spectrum:
+def read_spectrum_csv(path: PathLike, sep: str = "\t", header: Optional[int] = None) -> Spectrum:
     """
     Read a pectrum form CSV/TXT.
     
@@ -41,64 +41,42 @@ def read_spectrum_csv(path: PathLike, sep: str = "\t") -> Spectrum:
     """
 
     path = Path(path)
-    df = pd.read_csv(path = path, sep = sep)
+    df = pd.read_csv(path, sep = sep, header = header)
+    ncols = df.shape[1]
 
-    if df.shape[1] < 2:
-        raise ValueError(
-            f"{path} must contain at least two columns (ppm, intensity)"
-        )
-    ppm = df.iloc[:, 0].to_numpy(dtype = float)
-    intensity = df.iloc[:, 1]. to_numpy(dtype = float)
-
-    return Spectrum(ppm = ppm, intensity = intensity,
-                    metadata = {"filename": path.name,
-                                "filepath": str(path)})
-
-def read_complex_spectrum_csv(path: PathLike, sep: str = "\t")->Spectrum:
-    """
-    Read spectrum with columns: ppm | real | imaginary
-    """
-    path = Path(path)
-    df = pd.read_csv(path, sep = sep)
-    if df.shape[1] < 3:
-        raise ValueError(
-            "Complex spectrum required ppm, real, imag columns."
-        )
-    ppm = df.iloc[:, 0].to_numpy(dtype = float)
-    real = df.iloc[:, 1].to_numpy(dtype = float)
-    imag = df.iloc[:, 2].to_numpy(dtype = float)
-
-    intensity = real + 1j*imag
-
-    return Spectrum(ppm = ppm, intensity = intensity,
+    if ncols == 2:
+        ppm = df.iloc[:, 0].to_numpy(dtype = float)
+        real = df.iloc[:, 1].to_numpy(dtype = float)
+        imag = None
+    elif ncols >= 3:
+        ppm = df.iloc[:, 0].to_numpy(dtype = float)
+        real = df.iloc[:, 1].to_numpy(dtype = float)
+        imag = df.iloc[:, 2].to_numpy(dtype = float)
+    else:
+        raise ValueError(f"{path} must contain at least two columns (ppm, intensity)")
+    
+    return Spectrum(ppm = ppm, real = real, imag = imag,
                     metadata = {"filename": path.name,
                                 "filepath": str(path),
-                                "complex": True})
+                                "has_imag": imag is not None,
+                                "n_points": len(ppm)}) 
+
 
 def save_spectrum_csv(spectrum: Spectrum, path: PathLike):
     """
     Save spectrum to csv
     """
     path = Path(path)
-    df = pd.DataFrame(
-        {"ppm": spectrum.ppm,
-         "intensity": spectrum.intesity
-        })
-    df.to_csv(path, index = False)
 
-def save_complex_spectrum_csv(spectrum: Spectrum, path: PathLike):
-    """
-    Save complex spectrum
-    Output:
-    ppm | real | imag
-    """
-    path = Path(path)
-    intensity = np.asarray(spectrum.intensity)
-    df = pd.DataFrame(
-        {"ppm": spectrum.ppm,
-         "real": intensity.real,
-         "imag": intensity.imag} 
-    )
+    if spectrum.imag is None:
+        df = pd.DataFrame({"ppm": spectrum.ppm,
+                           "real": spectrum.real})
+    else:
+        df = pd.DataFrame({"ppm": spectrum.ppm,
+                           "real": spectrum.real,
+                           "imag": spectrum.imag})
+    
+    
     df.to_csv(path, index = False)
 
 
@@ -121,7 +99,7 @@ def list_spectra(directory: PathLike, suffixes = (".csv", ".txt")):
     directory = Path(directory)
     files = []
     for suffix in suffixes:
-        files.extend(directory.glob(f"{suffix}"))
+        files.extend(directory.glob(f"*{suffix}"))
 
     return sorted(files)
 
