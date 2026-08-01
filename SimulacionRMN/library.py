@@ -20,6 +20,7 @@ import pandas as pd
 import numpy as np
 
 from .spectrum import Spectrum
+from .io import read_spectrum_file, build_compund_mapping, normalize_name
 from .preprocessing import preprocess_spectrum
 
 
@@ -58,20 +59,13 @@ class SpectrumLibrary:
         nombre_archivo_csv
         """
 
-        metadata = pd.read_excel(self.metadata_path)
-        self.metadata = metadata
-        self.comp_to_file = {row["nombre_compuesto"]:
-                             row["nombre_archivo_csv"]
-                             for _, row in metadata.iterrows()
-                            }
-    
+        self.metadata = pd.read_excel(self.metadata_path)
+        self.comp_to_file = build_compund_mapping(self.metadata)
+
     def metadata_row(self, compound_name: str) ->pd.Series:
         """
         Retrieves metadata row corresponding to a compound
         """
-        if self.metadata is None:
-            self.load_metadata()
-
         rows = self.metadata[self.metadata["nombre_compuesto"] == compound_name]
 
         if len(rows) == 0:
@@ -108,15 +102,11 @@ class SpectrumLibrary:
         if not filepath.exists():
             raise FileNotFoundError(filepath)
         
-        df = pd.read_csv(filepath, sep = "\t")
+        spectrum = read_spectrum_file(filepath)
+        spectrum.name = compound_name
+        spectrum.metadata["compound"] = compound_name
 
-        ppm = df.iloc[:, 0].to_numpy(dtype = float)
-        intensity = df.iloc[:, 1].to_numpy(dtype = float)
-
-        return Spectrum(ppm = ppm, intensity = intensity.astype(np.float32),
-                        name = compound_name,
-                        metadata = {"compound": compound_name,
-                                    "filename": filename})
+        return spectrum
     
     def get_raw(self, compound_name: str) -> Spectrum:
         """
@@ -150,6 +140,23 @@ class SpectrumLibrary:
 
         return self.cache_processed[cache_key].copy()
     
+    def get_real(self, compound_name: str) -> Spectrum:
+        """
+        Retrieve real spectrum.
+        """
+        spec = self.get_raw(compound_name)
+        return Spectrum(ppm = spec.ppm.copy(), real = spec.real.copy(),
+                        imag = None, name = spec.name, metadata = spec.metadata.copy())
+
+    def get_complex(self, compound_name: str) -> Spectrum:
+        """
+        Retrieve complex spectrum.
+        """
+        spec = self.get_raw(compound_name)
+        return Spectrum(ppm = spec.ppm.copy(), real = spec.real.copy(),
+                        imag = spec.imag.copy() if spec.imag is not None else None,
+                        name = spec.name, metadata = spec.metadata.copy())
+
     def preload(self, preprocess: bool = False, **preprocess_kwargs) -> None:
         """
         Load all compounds into cache.
@@ -192,6 +199,11 @@ class SpectrumLibrary:
         print(f"Compounds : {len(self)}")
         print(f"Raw cached : {len(self.cache_raw)}")
         print(f"Processed cached : {len(self.cache_processed)}")
+
+        if self.metadata is not None:
+            print("Metadata columns:")
+            for col in self.metadata.columns:
+                print(f"  - {col}")
 
 
 
