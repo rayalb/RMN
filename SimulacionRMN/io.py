@@ -13,6 +13,11 @@ Responsibilities
 
 from __future__ import annotations
 
+
+import os 
+import unicodedata
+import warnings
+
 from pathlib import Path
 from typing import Union
 
@@ -23,17 +28,33 @@ from .spectrum import Spectrum
 
 PathLike = Union[str, Path]
 
-def read_spectrum_csv(path: PathLike, sep: str = "\t", header: Optional[int] = None) -> Spectrum:
+
+def normalize_name(name: str) -> str:
     """
-    Read a pectrum form CSV/TXT.
+    Normalize filenames/compound names for consistent matching.
+    Removes:
+        - directory path
+        - extension
+        - accents   
+        - upper/lower case differences
+    """
+    name = os.path.basename(str(name))
+    name = os.path.splitext(name)[0]
+    name = name.lower()
+    name =  unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+    return name.strip().replace(" ", "_")
+
+def read_spectrum_file(path: PathLike, sep: str | None = None) -> Spectrum:
+    """
+    Read spectrum file.
     
-    Expected format: ppm intensity
+    Expected format: ppm real or ppm real imag
     
     Paramaters
     ----------
     path : str | Path
-    sep : str 
-        Column separator.
+    sep : str, optional 
+        Column separator. If None, pandas will automatically detects it.
         
     Return
     ------
@@ -41,30 +62,43 @@ def read_spectrum_csv(path: PathLike, sep: str = "\t", header: Optional[int] = N
     """
 
     path = Path(path)
-    df = pd.read_csv(path, sep = sep, header = header)
+    if sep is None:
+        df = pd.read_csv(path, sep = None, engine = "python", header = None)
+    else:
+        df = pd.read_csv(path, sep = sep, header = None)
+    
     ncols = df.shape[1]
 
-    if ncols == 2:
-        ppm = df.iloc[:, 0].to_numpy(dtype = float)
-        real = df.iloc[:, 1].to_numpy(dtype = float)
-        imag = None
-    elif ncols >= 3:
-        ppm = df.iloc[:, 0].to_numpy(dtype = float)
-        real = df.iloc[:, 1].to_numpy(dtype = float)
-        imag = df.iloc[:, 2].to_numpy(dtype = float)
-    else:
+    if ncols < 2:
         raise ValueError(f"{path} must contain at least two columns (ppm, intensity)")
+
+    ppm = df.iloc[:, 0].to_numpy(dtype = float)
+    real = df.iloc[:, 1].to_numpy(dtype = float)
+    imag = None
+    if ncols >= 3:
+        imag = df.iloc[:, 2].to_numpy(dtype = float)
     
+    mask = np.isfinite(ppm) & np.isfinite(real)
+    if imag is not None:
+        mask &= np.isfinite(imag)
+
+    ppm = ppm[mask]
+    real = real[mask]
+    if imag is not None:
+        imag = imag[mask]
+
     return Spectrum(ppm = ppm, real = real, imag = imag,
+                    name = path.stem,
                     metadata = {"filename": path.name,
                                 "filepath": str(path),
                                 "has_imag": imag is not None,
                                 "n_points": len(ppm)}) 
 
-
-def save_spectrum_csv(spectrum: Spectrum, path: PathLike):
+def write_spectrum_csv(spectrum: Spectrum, path: PathLike, sep: str = "\t"):
     """
-    Save spectrum to csv
+    Save spectrum to csv.
+    If imag is available, three columns are written.
+    Otherwise, only two columns are save
     """
     path = Path(path)
 
@@ -77,45 +111,77 @@ def save_spectrum_csv(spectrum: Spectrum, path: PathLike):
                            "imag": spectrum.imag})
     
     
-    df.to_csv(path, index = False)
+    df.to_csv(path, sep = sep, index = False, header = False)
 
 
-def read_metadata_excel(path: PathLike) -> pd.DataFrame:
+def load_individual_spectrum(path: PathLike, sep: str = "\t", suffixes = (".csv", ".txt")) -> Spectrum:
     """
-    Read metadata Excel file
-    """
-    return pd.read_excel(path)
-
-def read_metadata_csv(path: PathLike) -> pd.DataFrame:
-    """
-    Read metadata CSV file
-    """
-    return pd.read_csv(path)
-
-def list_spectra(directory: PathLike, suffixes = (".csv", ".txt")):
-    """
-    List spectrum files in a directory.
-    """
-    directory = Path(directory)
-    files = []
-    for suffix in suffixes:
-        files.extend(directory.glob(f"*{suffix}"))
-
-    return sorted(files)
-
-def load_spectrum_directory(directory: PathLike, sep = "\t"):
-    """
-    Load all spectra in a folder.
+    Load every spectrum in a directory.
     Returns
     -------
-        dict[str, Spectrum]
+        spectra: list[Spectrum]
+        metadata: list[dict]
     """
-    spectra = {}
-    for path in list_spectra(directory):
-        spectra[path.stem] = read_spectrum_csv(path, sep = sep)
+    folder = Path(path)
+    spectra = []
+    metadata = []
+    files = sorted([ff for ff in folder.iterdir() if ff.is_file() and ff.suffix.lower() in suffixes and not ff.name.startswith("~$")])
 
-    return spectra
+    for file in files:
+        spec = read_spectrum_file(file)
+        spectra.append(spec)
+        metadata.append({
+            "filename": file.name,
+            "compound":normalize_name(file.stem),
+            "n_points": spec.n_points,
+            "has_imag": spec.imag is not None
+        })
+    return spectra, metadata
 
+def load_metadata(path: PathLike, sheet_name: str = "General") -> pd.DataFrame:
+    """
+    Load metadata table from Excel.
+    """
+    return pd.read_excel(path, sheet_name = sheet_name)
+    
+def match_spectra_to_metada(df: pd.DataFrame, metadata: list[dict]):
+    """
+    Match metadata table with loaded spectra.
+    """
+    if "csv" in df.columns:
+        filename_col = "csv"
+    elif "filename_csv" in df.columns:
+        filename_col = "filename_csv"
+    elif "filename" in df.columns:
+        filename_col = "filename"
+    else:
+        raise ValueError("Metadata must contain csv or filename column.")
+    
+    df = df.copy()
+    df["filename_norm"] = df[filename_col].apply(normalize_name)
+    loaded = pd.DataFrame(metadata)
+    loaded["idx"] = np.arange(len(loaded))
+    loaded["filename_norm"] = loaded["filename"].apply(normalize_name)
+
+    master = df.merge(loaded[["filename_norm", "idx", "filename"]], on = "filename_norm",
+                      how = "left", validate = "m:1")
+    
+    missing = master[master["idx"].isna()]
+    if len(missing):
+        warnings.warn(f"{len(missing)} spectra could not be matched.", UserWarning)
+                       
+    diagnostics = {
+        "total": len(master), "matched": len(master) - len(missing), "missing": len(missing),
+        "missing": len(missing), "missing_df": missing,
+        "filename_col": filename_col, "loaded": loaded, 
+    }
+    return master, diagnostics
+
+def load_internal_standard(path: PathLike) -> Spectrum:
+    """
+    Load internal standard spectrum.
+    """
+    return read_spectrum_file(path)
 
 def save_dataset_npz(dataset: dict, path: PathLike):
     """
@@ -138,9 +204,23 @@ def build_compound_mapping(metadata: pd.DataFrame, compound_col: str = "nombre_c
     """
     Build
         compuond -> filename
-    mapping from metada.
+        from the matched metadata table.
+    Parameters
+    ----------
+        metadata : pd.DataFrame,
+                Output of match_spectra_to_metada().
+        compound_col : str, 
+                Column containing  compounds names.
+        filename_col : str, 
+                Column containing spectrum filenames
+    Returns
+    -------
+        dict[str, str]
+            Mapping from compound names to spectrum filenames.
     """
-    return {
-            row[compound_col]: row[filename_col] for _, row in metadata.iterrows()
-            }
-    
+    mapping = {}
+    for _, row in metadata.iterrows():
+        if pd.isna(row[filename_col]):
+            continue
+        mapping[row[compound_col]] = row[filename_col]
+    return mapping
