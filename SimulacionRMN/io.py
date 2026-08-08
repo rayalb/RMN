@@ -44,6 +44,14 @@ def normalize_name(name: str) -> str:
     name =  unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
     return name.strip().replace(" ", "_")
 
+def to_float_series(series: pd.Series) -> pd.Series:
+    """
+    Convert a strings to floats, supporting comma decimals.
+    Invalid values are converted to NaN.
+    """
+    return pd.to_numeric(series.astype(str).str.replace(",", ".", regex = False), 
+                         errors = "coerce")
+
 def read_spectrum_file(path: PathLike, sep: str | None = None) -> Spectrum:
     """
     Read spectrum file.
@@ -62,6 +70,45 @@ def read_spectrum_file(path: PathLike, sep: str | None = None) -> Spectrum:
     """
 
     path = Path(path)
+
+    kwargs = dict(engine = "python")
+    if sep is not None:
+        kwargs["sep"] = sep
+    else:
+        kwargs["sep"] = None
+
+    df = pd.read_csv(path, **kwargs)
+    # If first column is not numeric, pandas probably read a header correctly.
+    # Otherwise we reload treating the first line as data.
+    try:
+        float(str(df.columns[0]))
+        has_header = False
+    except Exception:
+        has_header = True
+
+    if not has_header:
+        df = pd.read_csv(path, **kwargs, header = None)
+
+    ncols = df.shape[1]
+    if ncols < 2:
+        raise ValueError(f"{path} must contain at least two columns (ppm, intensity)")
+
+    if ncols == 2:
+        df.columns = ["ppm", "real"]
+        df["imag"] = None
+        has_imag = False
+    else:
+        df = df.iloc[:, :3]
+        df.columns = ["ppm", "real", "imag"]
+        has_imag = True
+
+    df["ppm"] = to_float_series(df["ppm"])
+    df["real"] = to_float_series(df["real"])
+    df["imag"] = to_float_series(df["imag"])
+
+    df = df.dropna(subset = ["ppm", "real"])
+    
+    ''' 
     if sep is None:
         df = pd.read_csv(path, sep = None, engine = "python", header = None)
     else:
@@ -86,13 +133,14 @@ def read_spectrum_file(path: PathLike, sep: str | None = None) -> Spectrum:
     real = real[mask]
     if imag is not None:
         imag = imag[mask]
-
-    return Spectrum(ppm = ppm, real = real, imag = imag,
+    '''
+    return Spectrum(ppm = df["ppm"].to_numpy(float), real = df["real"].to_numpy(float), 
+                    imag = df["imag"].to_numpy(float) if df["imag"].notnull().any() else None,
                     name = path.stem,
                     metadata = {"filename": path.name,
                                 "filepath": str(path),
-                                "has_imag": imag is not None,
-                                "n_points": len(ppm)}) 
+                                "has_imag": has_imag,
+                                "n_points": len(df)}) 
 
 def write_spectrum_csv(spectrum: Spectrum, path: PathLike, sep: str = "\t"):
     """
