@@ -60,7 +60,7 @@ class SpectrumLibrary:
         """
 
         self.metadata = pd.read_excel(self.metadata_path)
-        self.comp_to_file = build_compund_mapping(self.metadata)
+        self.comp_to_file = build_compound_mapping(self.metadata)
 
     def metadata_row(self, compound_name: str) ->pd.Series:
         """
