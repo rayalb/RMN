@@ -20,7 +20,7 @@ import pandas as pd
 import numpy as np
 
 from .spectrum import Spectrum
-from .io import read_spectrum_file, build_compund_mapping, normalize_name
+from .io import read_spectrum_file, build_compound_mapping, normalize_name
 from .preprocessing import preprocess_spectrum
 
 
