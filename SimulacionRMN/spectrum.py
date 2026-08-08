@@ -61,6 +61,18 @@ class Spectrum:
             return self.real.astype(np.complex64)
         else:
             return self.real.astype(np.complex64) + 1j*self.imag.astype(np.complex64)
+
+    @property
+    def magnitude(self) -> np.ndarray:
+        if self.imag is None:
+            return np.abs(self.real) 
+        return np.abs(self.complex)
+
+    @property
+    def phase(self) -> np.ndarray:
+        if self.imag is None:
+            return np.zeros_like(self.real)
+        return np.angle(self.complex)
     
     @property
     def n_points(self) -> int:
