@@ -50,7 +50,10 @@ class Spectrum:
         
         if len(self.ppm) != len(self.real):
             raise ValueError("ppm and real must have the same length.")
-        
+
+        self.metadata.setdefault("has_imag", self.imag is not None)
+        self.metadata.setdefault("n_points", len(self.ppm))
+
     @property
     def intensity(self) -> np.ndarray:
         return self.real
@@ -89,20 +92,49 @@ class Spectrum:
                         name = self.name,
                         metadata = self.metadata.copy())
     
-    def max(self) -> float:
-        return float(np.max(self.real))
+    def max(self, component: str = "real") -> float:
+        """Maximum value of a selected spectra representation."""
+        values = self._get_component(component)
+        return float(np.max(values))
     
-    def min(self) -> float:
-        return float(np.min(self.real))
+    def min(self, component: str = "real") -> float:
+        """Minimum value of a selected spectra representation."""
+        values = self._get_component(component)
+        return float(np.min(values))
     
-    def area(self) -> float:
-        return float(np.trapzoid(self.real, self.ppm))
+    def area(self, component: str = "real") -> float:
+        """Numerical integral of a selected  spectra representation."""
+        values = self._get_component(component)
+        return float(np.trapzoid(values, self.ppm))
+
+    def _get_component(self, component: str) -> np.ndarray:
+
+        if component == "real":
+            return self.real
+
+        if component == "imag":
+            if self.imag is None:
+                return np.zeros_like(self.real)
+            return self.imag
+
+        if component in ("absolute", "magnitude", "abs"):
+            return self.absolute
+
+        if component == "phase":
+            return self.phase
+
+        raise ValueError(f"Unknown component '{component}'."
+                         "Use 'real', 'imag', 'abs', or 'phase'.")
     
-    def normalize(self) -> "Spectrum":
+    def normalize(self, component: str = "abs") -> "Spectrum":
         """
-        Normalize by maximum absolute peak.
+        Normalize the spectrum by its maximum absolute value.
+        component: str. Representation used to determine the normalization
+                        factor. "real", "imag", "abs". Default: "abs"
         """
-        peak = np.max(np.abs(self.complex))
+        values = self._get_component(component)
+
+        peak = np.max(np.abs(values))
 
         if peak == 0:
             return self.copy()
@@ -129,24 +161,31 @@ class Spectrum:
                         imag = None if self.imag is None else self.imag[mask],
                         name = self.name, metadata = self.metadata.copy())
 
-    def plot(self, ax = None, figsize = (10, 4), invert_ppm: bool = True,
-             title: Optional[str] = None, **kwargs):
+    def plot(self, ax = None, figsize = (10, 4), component: str = "real",
+            invert_ppm: bool = True, title: Optional[str] = None, **kwargs):
         """
         Plot spectrum.
         Parameters
         ----------
+            component : str. Representation of the spectrum, "real", "imag",
+                                "abs", "phase". Default, "real".
             invert_ppm : bool. NMR convention uses decreasing ppm.
         """
         if ax is None:
             fig, ax = plt.subplots(figsize = figsize)
 
-        ax.plot(self.ppm, self.real, **kwargs)
+        values = self._get_component(component)
+        ax.plot(self.ppm, values, **kwargs)
 
         if invert_ppm:
             ax.invert_xaxis()
 
         ax.set_xlabel("ppm")
-        ax.set_ylabel("Intensity")
+        ylabel = {"real": "Real", "imag": "Imaginary", "absolute": "Absolute",
+                  "magnitud": "Absolute", "abs": "Absolute", "phase": "Phase (rad)"
+                  }.get(component, component)
+        
+        ax.set_ylabel(ylabel)
 
         if title is None:
             title = self.name
@@ -172,18 +211,23 @@ class Spectrum:
 @dataclass
 class MixtureSpectrum(Spectrum):
     """
-    Spectrum generated from multiple compounds.
+    Spectrum generated from multiple compounds. The mixture itself is represented
+    using real and optional imaginary components.
 
     Parameters
     ----------
     composition : dict[str, float], Dictionary with compound names and their concentrations.
     components : dict[str, Spectrum], Dictionary with compound names and their corresponding spectra.
     simulator_metadata : dict[str, Any], Optional metadata from the simulator.
+    internal_standard : Spectrum used as the internal standard, if presents.
+    imternal_standard_scale : Scaling factor applied to the internal standard.
     """
     composition: dict[str, float] = field(default_factory = dict)   
     components: dict[str, Spectrum] = field(default_factory = dict)
     simulator_metadata: dict[str, Any] = field(default_factory = dict)
-    
+    internal_standard: Spectrum | None = None
+    internal_standard_scale: float = 1.0
+
     @property
     def compounds(self) -> list[str]:
         return list(self.composition.keys())
@@ -191,17 +235,27 @@ class MixtureSpectrum(Spectrum):
     @property
     def n_compounds(self) -> list[str]:
         return list(self.composition)
+
+    @property
+    def has_internal_standard(self) -> bool:
+        return self.internal_standard is not None
     
     def copy(self) -> "MixtureSpectrum":
         return MixtureSpectrum(ppm = self.ppm.copy(), real = self.real.copy(),
                                imag = None if self.imag is None else self.imag.copy(),
                                name = self.name, metadata = self.metadata.copy(),
                                composition = self.composition.copy(),
-                               components = {k: v.copy() for k, v in self.components.items()},
-                               simulator_metadata = self.simulator_metadata.copy())
+                               components = {name: spec.copy() for name, spec in self.components.items()},
+                               simulator_metadata = self.simulator_metadata.copy(),
+                               internal_standard = None if self.internal_standard is None else self.internal_standard.copy(),
+                               internal_standard_scale = self.internal_standard_scale)
     
     def summary(self):
         print(f"Mixture with {len(self.composition)} compounds.")
         for comp, conc in self.composition.items():
             print(f"{comp:<30} {conc:.4f}")
 
+        if self.internal_standard is not None:
+            print(f"{'Internal standard':<30}"
+                  f"{self.internal_standard.name}"
+                  f"(scale = {self.internal_standard_scale:.4f})")
