@@ -293,6 +293,7 @@ def plot_complex(spectra: Spectrum, invert_ppm: bool = True, linewidth: float = 
             ax.invert_xaxis()
         ax.grid(True, alpha = 0.3)
 
+    fig.suptitle(spectra.name or "Complex Spectrum", fontsize  =14)
     plt.tight_layout()
     if show:
         plt.show()
