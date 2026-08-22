@@ -230,9 +230,10 @@ def load_internal_standard(path: PathLike) -> Spectrum:
     Load internal standard spectrum.
     """
     spectra = read_spectrum_file(path)
-    spectra.name = "TSP"
-    spectra.metadata["role"] = "internal_standard"
+    spectra.name = "internal standard"
 
+    spectra.metadata.update({"internal_standard": True})
+    
     return spectra
 
 def save_dataset_npz(dataset: dict, path: PathLike):
