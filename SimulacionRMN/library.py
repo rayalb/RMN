@@ -17,17 +17,19 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-import numpy as np
+
 
 from .spectrum import Spectrum
-from .io import read_spectrum_file, build_compound_mapping, normalize_name
+from .io import read_spectrum_file, read_metadata_excel, build_compound_mapping,
 from .preprocessing import preprocess_spectrum
 
 
 class SpectrumLibrary:
     """
     Library of individual compound spectra.
-    
+    The Library connects:
+    compound name -> metadata -> spectrum filename -> Spectrum(ppm, real, imag)
+
     Examples
     --------
     lib = SpectrumLibrary(metadata_path = "metadata.xlsx",
@@ -59,13 +61,23 @@ class SpectrumLibrary:
         nombre_archivo_csv
         """
 
-        self.metadata = pd.read_excel(self.metadata_path)
-        self.comp_to_file = build_compound_mapping(self.metadata)
+        if not self.metadata_path.exists():
+            raise FileNotFoundError(f"Metadata file not found: {self.metadata_path}.")
+
+        
+
+        self.metadata = read_metadata_excel(self.metadata_path)
+
+        self.comp_to_file = build_compound_mapping(self.metadata, compound_col = "nombre_compuesto",
+                                                   filename_col = "nombre_archivo_csv")
 
     def metadata_row(self, compound_name: str) ->pd.Series:
         """
         Retrieves metadata row corresponding to a compound
         """
+        if self.metadata is None:
+            self.load_metadata()
+
         rows = self.metadata[self.metadata["nombre_compuesto"] == compound_name]
 
         if len(rows) == 0:
@@ -88,7 +100,7 @@ class SpectrumLibrary:
         """
         Load a spectrum from disk
 
-                Returns
+        Returns
         -------
         Spectrum
         """
@@ -104,8 +116,11 @@ class SpectrumLibrary:
         
         spectrum = read_spectrum_file(filepath)
         spectrum.name = compound_name
-        spectrum.metadata["compound"] = compound_name
-
+        spectrum.metadata.update({
+            "compound": compound_name,
+            "filename": filename
+        })
+    
         return spectrum
     
     def get_raw(self, compound_name: str) -> Spectrum:
@@ -179,11 +194,9 @@ class SpectrumLibrary:
         return list(self.comp_to_file.keys())
 
     def __len__(self) -> int:
-
         return len(self.comp_to_file)
 
     def __contains__(self, compound_name: str) -> bool:
-
         return compound_name in self.comp_to_file
     
     def __repr__(self) -> str:
