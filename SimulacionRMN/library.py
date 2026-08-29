@@ -20,7 +20,7 @@ import pandas as pd
 
 
 from .spectrum import Spectrum
-from .io import read_spectrum_file, read_metadata_excel, build_compound_mapping,
+from .io import read_spectrum_file, read_metadata_excel, build_compound_mapping
 from .preprocessing import preprocess_spectrum
 
 
