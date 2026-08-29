@@ -36,19 +36,55 @@ class MixtureSimulator:
         self.rng = np.random.default_rng(random_state)
 
     @staticmethod
-    def _check_ppm_compatibility(spectra: list[Spectrum]) -> None:
+    def _check_ppm_compatibility(spectra: Sequence[Spectrum]) -> None:
+        """
+        Check that all spectra use the same ppm axis.
+        """
+        if len(spectra) == 0:
+            raise ValueError("No spectra provided.")
+        
         ref_ppm = spectra[0].ppm
 
         for spec in spectra[1:]:
             if len(spec.ppm) != len(ref_ppm):
                 raise ValueError("Spectra have different lengths.")
-            if not np.allclose(spec.ppm, ref_ppm):
+            if not np.allclose(spec.ppm, ref_ppm, rtol = 0, atol = 1e-6):
                 raise ValueError("Spectra are not aligned on the same ppm axis.")
-            
+
+    @staticmethod
+    def _validate_concentrations(concentrations: Sequence[float]) -> np.ndarray:
+        """
+        Convert concentrations to a numpy array and validate them.
+        """
+
+        concentrations = np.asarray(concentrations, dtype = float)
+
+        if np.any(~np.isfinite(concentrations)):
+            raise ValueError(
+                "Concetrations must be finite."
+            )
+        if np.any(concentrations < 0):
+            raise ValueError("Concentrations cannot be negative.")
+        if np.all(concentrations == 0):
+            raise ValueError("At least one concentration must be positive.")
+        return concentrations
+        
     def simulate(self, compounds: Sequence[str], concentrations: Sequence[float],
                  normalize_concentrations: bool = False, store_components: bool = False) -> MixtureSpectrum:
         """
         Generates a mixture from specified compounds.
+
+        Parameters
+        ----------
+            compounds : Names of compounds in the library.
+            concentrations : Relative concentrations.
+            normalize_concetrations : If True, concentrations are normalize to sum one.
+            store_components: If True, store the individual spectra inside the 
+                                resulting MixtureSpectrum.
+
+        Returns
+        -------
+            MixtureSpectrum
         
         Example:
         --------
@@ -57,10 +93,10 @@ class MixtureSimulator:
         """
 
         compounds = list(compounds)
-        concentrations = np.asarray(concentrations, dtype = float)
-
         if len(compounds) == 0:
             raise ValueError("No compounds provided.")
+        
+        concentrations = self._validate_concentrations(concentrations)
 
         if len(compounds) != len(concentrations):
             raise ValueError("Compounds and concentrations must have the same length.")
@@ -73,46 +109,61 @@ class MixtureSimulator:
             concentrations = concentrations/total
 
         spectra = [self.library.get_raw(comp) for comp in compounds]
+        self._check_ppm_compatibility(spectra)
+
+        has_imag = any(spec.imag is not None for spec in spectra)
+
+        ppm = spectra[0].ppm.copy()
+        mixture_real = np.zeros_like(spectra[0].real, dtype = float)
+        mixture_imag = None
+        if has_imag:
+            mixture_imag = np.zeros_like(spectra[0].real, dtype = float)
 
         components = {}
         if store_components:
-            components = {comp: spec.copy() for comp, spec in zip(compounds, spectra)}
+            components = {compound: spec.copy() for compound, spec in zip(compounds, spectra)}
 
-        self._check_ppm_compatibility(spectra)
-
-        ppm = spectra[0].ppm.copy()
-
-        mixture = np.zeros_like(spectra[0].intensity, dtype = float)
-
+       
         composition = {}
-        for comp, conc, spec in zip(compounds, concentrations, spectra):
-            mixture += conc*spec.intensity
+        for compound, concentration, spec in zip(compounds, concentrations, spectra):
+            concentration = float(concentration)
 
-            composition[comp] = float(conc)
+            mixture_real += concentration*spec.real
 
-        return MixtureSpectrum(ppm = ppm, intensity = mixture.astype(np.float32),
+            if has_imag:
+                if spec.imag is not None:
+                    mixture_imag += concentration*spec.imag
+
+            composition[compound] = concentration 
+
+        metadata = {"n_compounds": len(compounds), "has_imag": has_imag}
+        simulator_metadata = {"normalize_concetrations": normalize_concentrations,
+                              "store_components": store_components}
+        
+        return MixtureSpectrum(ppm = ppm, real = mixture_real.astype(np.float32),
+                               imag = mixture_imag.astype(np.float32) if mixture_imag is not None else None,
                                name = "Mixture", 
-                               metadata = {"n_compounds": len(compounds)},
-                               composition = composition, components = components,
-                               simulator_metadata = {"normalize_concentrations": normalize_concentrations,
-                                                                                "store_components": store_components})
+                               metadata = metadata, composition = composition, components = components,
+                               simulator_metadata = simulator_metadata)
     
     # Dictionary interface
 
     def simulate_from_dict(self, composition: dict[str, float],
-                           normalize_concentrations: bool = False) -> MixtureSpectrum:
+                           normalize_concentrations: bool = False,
+                           store_components: bool = False) -> MixtureSpectrum:
         """
         Generate mixture from a dictionary.
         Example
         -------
             mix = simulator.simulate_from_dict({
                     "Glucose": 0.4,
-                    "Alanine": 0.6}
+                    "Alanine": 0.6}, store_components = True
                 )
         """
         return self.simulate(compounds = list(composition.keys()),
                              concentrations = list(composition.values()),
-                             normalize_concentrations = normalize_concentrations)
+                             normalize_concentrations = normalize_concentrations,
+                             store_components = store_components)
     
     
     def simulate_random(self, n_compounds: int | tuple[int, int] = (2, 8),
@@ -150,9 +201,9 @@ class MixtureSimulator:
         return self.simulate(compounds = compounds, concentrations = concentrations,
                              normalize_concentrations = normalize_concentrations, store_components = store_components)
     
-    def simulate_from_spectra(self, spectra: list[Spectrum], concentrations: list[float], 
-                              names: list[str] | None = None, normalize_concentrations: bool = False,
-                              metadata: dict | None = None) -> MixtureSpectrum:
+    def simulate_from_spectra(self, spectra: Sequence[Spectrum], concentrations: Sequence[float], 
+                              names: Sequence[str] | None = None, normalize_concentrations: bool = False,
+                              store_components: bool = True, metadata: dict | None = None) -> MixtureSpectrum:
         """
         Generate a mixture from Spectrum objects.
         Parameters
@@ -163,57 +214,84 @@ class MixtureSimulator:
                     Names for the spectra. If None, spectrum.name is used.
             normalize_concentrations: bool, optional.
                                     Normalize concetrations so they sum to one.
+            store_components: Store the component spectra.
             metadata: dict, optional.
                     Extra metadata for the mixture.
         """
+        spectra = list(spectra)
+
         if len(spectra) == 0:
             raise ValueError("No spectra provided.")
+
+        concentrations = self._validate_concentrations(concentrations)
         
         if len(spectra) != len(concentrations):
             raise ValueError("Number of spectra and concetrations must match.")
-        concentrations = np.asarray(concentrations, dtype = float)
-
+        
         if normalize_concentrations:
             total = concentrations.sum()
             if total <= 0:
                 raise ValueError("Concentrations must sum to a positive value.")
-        concentrations /= total
+            concentrations /= total
+
+        if names is None:
+            names = list(names)
+            if len(names) != len(spectra):
+                raise ValueError("Number of names must match number of spectra.")
+
 
         self._check_ppm_compatibility(spectra)
         ppm = spectra[0].ppm.copy()
-        mixture = np.zeros_like(spectra[0].intensity, dtype = float)
+
+        has_imag = any(spec.imag is not None for spec in spectra)
+
+        mixture_real = np.zeros_like(spectra[0].real, dtype = float)
+        mixture_imag = None
+        if has_imag:
+            mixture_imag = np.zeros_like(spectra[0].real, dtype = float)
 
         composition = {}
         stored_components = {}
 
-        for ii, (spec, conc) in enumerate(zip(spectra, concentrations)):
-            mixture += conc*spec.intensity
+        for ii, (spec, concentration) in enumerate(zip(spectra, concentrations)):
+            concentration = float(concentration)
 
             if names is None:
                 name = spec.name or f"Component_{ii+1}"
             else:
                 name = names[ii]
-            composition[name] = float(conc)
-            stored_components[name] = spec.copy()
+
+            mixture_real += concentration*spec.real
+            if has_imag and spec.imag is not None:
+                mixture_imag += concentration*spec.imag
+
+
+            composition[name] = concentration
+            if store_components:
+                stored_components[name] = spec.copy()
+
 
         meta = dict(metadata or {})
-        meta["n_compounds"] = len(spectra)
-        meta["generated_from"] = "spectra"
-
-        return MixtureSpectrum(ppm = ppm, intensity = mixture.astype(np.float32),
-                               composition = composition, components = stored_components,
-                               metadata = meta)
+        meta.update({"n_compounds": len(spectra),
+                    "generated_from": "spectra"
+        })
+        simulator_metadata = {"normalized_concentrations": normalize_concentrations,
+                              "store_components": store_components}
+        
+        return MixtureSpectrum(ppm = ppm, real = mixture_real.astype(np.float32),
+                               imag = mixture_imag.astype(np.float32) if mixture_imag is not None else None,
+                               name = "Mixture", composition = composition, components = stored_components,
+                               metadata = meta, simulator_metadata = simulator_metadata)
 
 
     def generate_batch(self, n_mixtures: int, **kwargs) -> list[MixtureSpectrum]:
         """
         Generate multiple mixtures.
         """
-        mixtures = []
-        for _ in range(n_mixtures):
-            mixtures.append(self.simulate_random(**kwargs))
+        if n_mixtures < 1:
+            raise ValueError("n_mixtures must be >=1.")
 
-        return mixtures
+        return [self.simulate_random(**kwargs) for _ in range(n_mixtures)]
     
     def get_compounds(self, mixture: MixtureSpectrum) -> dict[str, Spectrum]:
         """
@@ -223,8 +301,9 @@ class MixtureSimulator:
         Otherwise, they are loaded from the library.
         """
         if mixture.components:
-            return mixture.components
-        return {comp: self.library.get_raw(comp) for comp in mixture.composition}
+            return {name: spec.copy() for name, spec in mixture.components.items()}
+        
+        return {compound: self.library.get_raw(compound) for compound in mixture.composition}
 
     @staticmethod
     def summary(self, mixture: MixtureSpectrum):
