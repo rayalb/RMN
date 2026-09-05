@@ -234,11 +234,10 @@ class MixtureSimulator:
                 raise ValueError("Concentrations must sum to a positive value.")
             concentrations /= total
 
-        if names is None:
+        if names is not None:
             names = list(names)
             if len(names) != len(spectra):
                 raise ValueError("Number of names must match number of spectra.")
-
 
         self._check_ppm_compatibility(spectra)
         ppm = spectra[0].ppm.copy()
@@ -306,12 +305,12 @@ class MixtureSimulator:
         return {compound: self.library.get_raw(compound) for compound in mixture.composition}
 
     @staticmethod
-    def summary(self, mixture: MixtureSpectrum):
+    def summary(mixture: MixtureSpectrum):
         """
         Print composition.
         """
         print(f"Mixture with {len(mixture.composition)} compounds")
 
-        for comp, conc in mixture.composition.item():
+        for comp, conc in mixture.composition.items():
             print(f"{comp: < 25} {conc:.4f}")
         
