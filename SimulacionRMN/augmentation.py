@@ -27,7 +27,7 @@ or
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import numpy as np
 from scipy.signal import hilbert
@@ -35,7 +35,7 @@ from scipy.signal import hilbert
 from .spectrum import Spectrum
 
 
-class SpectrumSimulator:
+class SpectrumAugmentator:
     """
     NMR Spectrum simulator. Can simulate:
         - individual compounds.
@@ -70,41 +70,60 @@ class SpectrumSimulator:
 
         self.rng = np.random.default_rng(random_state)
 
+    def _shift_array(self, arr: np.ndarray, shift_pts: int) -> np.ndarray:
+        """
+        Shift an array by a number of points, filling the empty space with zeros.
+        """
+        if shift_pts == 0:
+            return arr.copy()
+        shifted = np.roll(arr, shift_pts)
+        if shift_pts > 0:
+            shifted[:shift_pts] = 0.0
+        elif shift_pts < 0:
+            shifted[shift_pts:] = 0.0
+        return shifted
 
+    def _convolve_array(self, arr: np.ndarray, kernels: List[np.ndarray]) -> np.ndarray:
+        """
+        Convolve an array with a kernel, using 'same' mode.
+        """
+        out= arr.copy()
+        for kk in kernels:
+            out = np.convolve(out, kk, mode='same')
+        return out  
+    
     def shift(self, spectrum: Spectrum) -> Spectrum:
-        y = spectrum.intensity.copy()
-        metadata = dict(spectrum.metadata)
-
+        
         shift_pts = int(self.rng.normal(loc = 0, scale = self.max_shift/3))
         shift_pts = int(np.clip(shift_pts, -self.max_shift, self.max_shift))
 
         # shifted = ng.process.porc_base.cs(y, shift_pts)
         # TODO: CHEQUEAR si hace lo mismo que el nmrglue.
-        shifted = np.roll(y, shift_pts)
-        if shift_pts > 0:
-            y[:shift_pts] = 0.0
-        elif shift_pts < 0:
-            y[shift_pts:] = 0.0
-        
+        real = self._shift_array(spectrum.real, shift_pts)
+        imag = None
+        if spectrum.imag is not None:
+            imag = self._shift_array(spectrum.imag, shift_pts)  
+        metadata = dict(spectrum.metadata)    
         metadata["shift_pts"] = shift_pts
 
-        return Spectrum(ppm = spectrum.ppm.copy(), intensity = y.astype(np.float32),
+        return Spectrum(ppm = spectrum.ppm.copy(), real = real.astype(np.float32),
+                        imag = imag.astype(np.float32) if imag is not None else None,
                         name = spectrum.name, metadata = metadata)
     
     
     def broaden(self, spectrum: Spectrum) -> Spectrum:
-        y = spectrum.intensity.copy()
-        metadata = dict(spectrum.metadata)
 
-         # Gaussian broadening
+        metadata = dict(spectrum.metadata)
+        kernels = []
+
+        # Gaussian broadening
         sigma = self.rng.uniform(*self.gauss_sigma_range)
         metadata["gauss_sigma"] = float(sigma)
         if sigma > 0:
             L = max(3, int(6*sigma) + 1)
             x = np.arange(-(L//2), L//2 + 1)
             g = np.exp(-0.5*(x/sigma)**2)
-            g /= g.sum()
-            y = np.convolve(y, g, mode = 'same')
+            kernels.append(g/g.sum())
 
         # Lorentzian broadening
         gamma = self.rng.uniform(*self.lorentz_gamma_range)
@@ -113,12 +132,10 @@ class SpectrumSimulator:
             L = max(3, int(10*gamma) + 1)
             x = np.arange(-(L//2), L//2 + 1)
             l = 1.0/(1.0 + (x/gamma)**2)
-            l /= l.sum()
-            y = np.convolve(y, l, mode = 'same')
-        
-         # Asymmetric tail
-        metadata["asym_applied"] = False
+            kernels.append(l/l.sum())
 
+        # Asymmetric tail
+        metadata["asym_applied"] = False
         if self.rng.random() < self.asym_prob and self.asym_decay_pts > 0:
             amp = self.rng.uniform(*self.asym_amp_range)
             direction = int(self.rng.choice([-1, 1]))
@@ -128,20 +145,25 @@ class SpectrumSimulator:
             metadata["asym_dir"] = direction
 
             L = max(5, int(5*self.asym_decay_pts))
-            x = np.arange(L)
-            decay = np.exp(-x/self.asym_decay_pts)
+            decay = np.exp(-np.arange(L)/self.asym_decay_pts)
             decay /= decay.sum()
 
-            kernel = np.zeros(2*L+1)
-            kernel[L] = 1.0 - amp
+            asym_kernel = np.zeros(2*L+1)
+            asym_kernel[L] = 1.0 - amp
             if direction > 0:
-                kernel[L+1:L + 1 + L] = amp*decay    # tail to the right
+                asym_kernel[L+1:L + 1 + L] = amp*decay    # tail to the right
             else:
-                kernel[L - L: L] = (amp*decay)[::-1] # tail to the left
+                asym_kernel[L - L: L] = (amp*decay)[::-1] # tail to the left
+            kernels.append(asym_kernel)
 
-            y = np.convolve(y, kernel, mode = "same")
+        real = self._convolve_array(spectrum.real, kernels)
+        imag = None
+        if spectrum.imag is not None:
+            imag = self._convolve_array(spectrum.imag, kernels)
+        metadata["broadened"] = True
 
-        return Spectrum(ppm = spectrum.ppm.copy(), intensity = y.astype(np.float32),
+        return Spectrum(ppm = spectrum.ppm.copy(), real = real.astype(np.float32),
+                        imag = imag.astype(np.float32) if imag is not None else None,
                         name = spectrum.name, metadata = metadata)
     
     def phase(self, spectrum: Spectrum) -> Spectrum:
@@ -149,53 +171,70 @@ class SpectrumSimulator:
         phi1 = self.rng.uniform(*self.phi1_range)
 
         ref_ppm = (spectrum.ppm.max() + spectrum.ppm.min())/2
-        phase = np.deg2rad(phi0 + phi1*(spectrum.ppm - ref_ppm))
-        analytic = hilbert(spectrum.intensity)
-        analytic *= np.exp(1j*phase)
-        metadata = dict(spectrum.metadata)
+        phase_rad = np.deg2rad(phi0 + phi1*(spectrum.ppm - ref_ppm))
+        phase_factor = np.exp(1j*phase_rad)
 
+        complex_spectrum = spectrum.real + 1j*(spectrum.imag if spectrum.imag is not None 
+                                               else hilbert(spectrum.real).imag)
+        phased = complex_spectrum*phase_factor
+
+        metadata = dict(spectrum.metadata)
         metadata["phi0"] = float(phi0)
         metadata["phi1"] = float(phi1)
 
         return Spectrum(ppm = spectrum.ppm.copy(),
-                        intensity = analytic.real.astype(np.float32),
+                        real = phased.real.astype(np.float32),
+                        imag = phased.imag.astype(np.float32) if phased.imag is not None else None,
                         name = spectrum.name, metadata = metadata)
     
     def baseline(self, spectrum: Spectrum) -> Spectrum:
         offset = self.rng.uniform(*self.baseline_range)
-        y = spectrum.intensity + offset
         metadata = dict(spectrum.metadata)
         metadata["baseline_offset"] = float(offset)
 
-        return Spectrum(ppm = spectrum.ppm.copy(), intensity = y.astype(np.float32),
+        return Spectrum(ppm = spectrum.ppm.copy(), real = (spectrum.real.copy() + offset).astype(np.float32),
+                        imag = (spectrum.imag.copy() + offset).astype(np.float32) if spectrum.imag is not None else None,
                         name = spectrum.name, metadata = metadata)
     
     def noise(self, spectrum: Spectrum) -> Spectrum:
-        rms = np.sqrt(np.mean(spectrum.intensity**2))
-        sigma = self.noise_fraction*rms
-        noise = self.rng.normal(loc = 0.0, scale = sigma, size = len(spectrum))
-        y = spectrum.intensity + noise 
         metadata = dict(spectrum.metadata)
-        metadata["noise_sigma"] = float(sigma)
 
-        return Spectrum(ppm = spectrum.ppm.copy(), intensity = y.astype(np.float32),
+        if spectrum.imag is not None:
+            rms = np.sqrt(np.mean(spectrum.real**2 + spectrum.imag**2))
+            sigma = self.noise_fraction*rms
+            channel_sigma = sigma/np.sqrt(2)
+            real_noise = self.rng.normal(loc = 0.0, scale = channel_sigma, size = len(spectrum.real))
+            imag_noise = self.rng.normal(loc = 0.0, scale = channel_sigma, size = len(spectrum.imag))
+            real = spectrum.real + real_noise
+            imag = spectrum.imag + imag_noise
+        else:
+            # Real part only
+            rms = np.sqrt(np.mean(spectrum.real**2))
+            sigma = self.noise_fraction*rms
+            real = spectrum.real + self.rng.normal(loc = 0.0, scale = sigma, size = len(spectrum.real))
+            imag = None
+
+        metadata["noise_sigma"] = float(sigma)
+        return Spectrum(ppm = spectrum.ppm.copy(), real = real.astype(np.float32),
+                        imag = imag.astype(np.float32) if imag is not None else None,
                         name = spectrum.name, metadata = metadata)
-    
+
     def scale(self, spectrum: Spectrum) -> Spectrum:
         factor = self.rng.uniform(*self.intensity_scale_range)
+
+        real = factor * spectrum.real
+        imag = None
+        if spectrum.imag is not None:
+            imag = factor * spectrum.imag
 
         metadata = dict(spectrum.metadata)
         metadata["scale"] = float(factor)
         return Spectrum(ppm = spectrum.ppm.copy(), 
-                        intensity = (factor * spectrum.intensity).astype(np.float32),
+                        real = real.astype(np.float32), 
+                        imag = imag.astype(np.float32) if imag is not None else None,
                         name = spectrum.name, metadata = metadata)
     
-    def simulate(self, spectrum: Spectrum, apply_shift: bool = True,
-                 apply_broadening: bool = True,
-                 apply_phase: bool = True,
-                 apply_baseline: bool = True,
-                 apply_noise: bool = True,
-                 apply_scaling: bool = True) -> Spectrum:
+    def simulate(self, spectrum: Spectrum, **kwargs) -> Spectrum:
         """
         Simulate distortion on a spectrum.
         Returns
@@ -203,26 +242,12 @@ class SpectrumSimulator:
         Spectrum: Augmented spectrum.
         """
         spec = spectrum.copy()
-
-        # Shift
-        if apply_shift:
-            spec = self.shift(spec)
-        # Broadening + assymmetry
-        if apply_broadening:
-            spec = self.broaden(spec)
-        # Phase
-        if apply_phase:
-            spec = self.phase(spec)
-        # Baseline
-        if apply_baseline:
-            spec = self.baseline(spec)
-        # Noise
-        if apply_noise:
-            spec = self.noise(spec)
-        # Scaling
-        if apply_scaling:
-            spec = self.scale(spec)
-
+        methods = [("apply_shift", self.shift), ("apply_broadening", self.broaden),
+                   ("apply_phase", self.phase), ("apply_baseline", self.baseline),
+                   ("apply_noise", self.noise), ("apply_scaling", self.scale)]
+        for flag, method in methods:
+            if kwargs.get(flag, True):
+                spec = method(spec)
         return spec 
     
     def __call__(self, spectrum: Spectrum, **kwargs):
